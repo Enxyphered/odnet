@@ -1,0 +1,14 @@
+# Compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.pdb
+*.obj
+*.o
+
+# Temporary and OS files
+*.tmp
+*.log
+.DS_Store
+Thumbs.db

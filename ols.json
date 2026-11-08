@@ -1,0 +1,33 @@
+{
+	"$schema": "https://raw.githubusercontent.com/DanielGavin/ols/master/misc/ols.schema.json",
+	"collections": [
+		{
+			"name": "core",
+			"path": "C:/Tools/Odin/core"
+		},
+		{
+			"name": "vendor",
+			"path": "C:/Tools/Odin/vendor"
+		}
+	],
+	"enable_document_symbols": true,
+	"enable_hover": true,
+	"enable_snippets": true,
+	"enable_semantic_tokens": true,
+	"enable_references": true,
+	"enable_document_highlights": true,
+	"enable_completions": true,
+	"enable_auto_import": true,
+	"enable_format": true,
+	"odin_command": "C:/Tools/Odin/odin.exe",
+	"profile": "default",
+	"profiles": [
+		{
+			"name": "default",
+			"checker_path": [
+				"odnetclient",
+				"odnetlib"
+			]
+		}
+	]
+}
