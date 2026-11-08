@@ -52,29 +52,111 @@ The build scripts handle the complete pipeline:
 
 ## HTML Component Engine (`odnetgen`)
 
-`odnetgen` compiles native HTML files into Odin procedures. Components can be nested, accept parameters, and support slot insertion.
+`odnetgen` is a compile-time HTML template engine that translates standard `.html` component files into type-safe Odin render procedures. Components can be nested, accept parameters, and support multiple named slots and variable fallbacks with zero runtime allocation overhead.
 
 ### Template Syntax
 
 | Feature | Syntax | Example |
 | :--- | :--- | :--- |
 | **Variables** | `{name}` | `<h1>Hello, {title} {name}!</h1>` |
-| **Component Call** | `@Component(...)` | `@Greet(title: "Mr.", name: name, badge_id: "007")` |
-| **Tag Style** | `<Component ... />` | `<Button label="Submit" variant="primary" />` |
-| **Default Slot** | `{slot}` & `@Component(...) { ... }` | `@Card(title: "Overview") { <p>Slot content</p> }` |
-| **Named Slots** | `{slot:name}` & `<slot:name>` / `@slot(name)` | `<Card><slot:actions><button>OK</button></slot:actions></Card>` |
+| **Component Call (At)** | `@Component(...)` | `@Greet(title: "Mr.", name: name, badge_id: "007")` |
+| **Component Call (Tag)** | `<Component ... />` | `<Button label="Submit" variant="primary" />` |
+| **Default Slot** | `{slot}` | `@Card(title: "Overview") { <p>Slot content</p> }` |
+| **Named Slots** | `{slot:name}` | `<slot:actions><button>Save</button></slot:actions>` |
 | **Polymorphic / Fallback Slots** | `{slot:name ?? var}` or `{slot:name \|\| "Default"}` | `<h3>{slot:title ?? title}</h3>` |
+| **Block Slot Fallback** | `<slot:name><h3>{title}</h3></slot:name>` | Renders `<h3>{title}</h3>` if slot is omitted |
 | **Escaped Braces** | `{{` / `}}` or `\{` / `\}` | `body {{ margin: 0; }}` renders literal `{ margin: 0; }` |
 | **Escaped At** | `@@` or `\@` | `user@@example.com` renders literal `@` |
 
+---
+
+### Component Slots & Polymorphic Fallbacks
+
+Components can define multiple named slots alongside default child content, as well as automatic fallbacks when a slot is not provided. There are two patterns depending on whether the wrapper tag is part of the fallback:
+
+#### Pattern A: Block Slot Fallback (Replaces the entire wrapper tag)
+
+Use `<slot:name>...</slot:name>` or `@slot(name) { ... }` in your component definition when you want the caller's custom slot to **completely replace** the tag (e.g., avoiding an unwanted `<h3>` wrapper around custom markup):
+
+```html
+<div class="card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+  <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+    <!-- If <slot:title> is provided, it renders directly.
+         If omitted, it falls back to rendering <h3>{title}</h3> -->
+    <slot:title>
+      <h3 class="text-base font-semibold text-slate-900 tracking-tight">{title}</h3>
+    </slot:title>
+    
+    <div class="flex items-center gap-2">
+      {slot:actions}
+    </div>
+  </div>
+
+  <div class="p-6">
+    {slot}
+  </div>
+</div>
+```
+
+#### Pattern B: Inline Slot Fallback (Inside an existing wrapper tag)
+
+Use `{slot:name ?? var}` or `{slot:name || "Default"}` when the wrapper tag is always present and you only want to customize the inner content:
+
+```html
+<button class="btn">
+  <!-- Always stays a button, customizes inner icon/text -->
+  {slot:label ?? label}
+</button>
+```
+
+#### 2. Using Named Slots in Caller Templates
+
+**Tag Style:**
+```html
+<Card title="Account Overview">
+  <slot:actions>
+    <span class="badge bg-emerald-50 text-emerald-700">Active</span>
+  </slot:actions>
+
+  <!-- Content outside explicit slot tags goes directly to the default slot -->
+  <p>Welcome back, {username}!</p>
+</Card>
+```
+
+**At-Syntax Style:**
+```html
+@Card(title: "Account Overview") {
+  @slot(actions) {
+    <span class="badge bg-emerald-50 text-emerald-700">Active</span>
+  }
+  <p>Welcome back, {username}!</p>
+}
+```
+
+---
+
 ### Using Generated Components in Odin
+
+When compiled by `odnetgen`, each component produces a procedure with optional named parameters for variables and slots:
 
 ```odin
 import "core:strings"
 
 handle_home :: proc(req: ^http.Request, res: ^http.Response) {
     b := strings.builder_make(context.temp_allocator)
-    render_home(&b, username = "Shaamil", name = "Shaamil", badge_id = "007")
+    
+    // Direct Odin invocation with custom slots
+    render_card(
+        &b,
+        title = "Dashboard",
+        slot_actions = proc(b: ^strings.Builder, user_data: rawptr) {
+            strings.write_string(b, "<button class=\"btn-sm\">Refresh</button>")
+        },
+        slot = proc(b: ^strings.Builder, user_data: rawptr) {
+            strings.write_string(b, "<p>Real-time analytics data here.</p>")
+        },
+    )
+    
     http.response_set_html(res, strings.to_string(b))
 }
 ```
