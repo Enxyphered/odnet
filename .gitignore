@@ -22,3 +22,8 @@ output/
 *.log
 .DS_Store
 Thumbs.db
+
+*node_modules
+*.vsix
+!odhtml_lsp/odhtml-lsp-*.vsix
+odhtml_lsp/out/

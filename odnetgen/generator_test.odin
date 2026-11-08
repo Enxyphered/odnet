@@ -189,7 +189,7 @@ test_parse_import_directive :: proc(t: ^testing.T) {
 	pos := 0
 	imports := make([dynamic]Import_Decl)
 	props := make([dynamic]Prop_Decl)
-	parse_imports_and_props(template, &pos, &imports, &props, "test.html")
+	parse_imports_and_props(template, &pos, &imports, &props, "test.odhtml")
 
 	testing.expect_value(t, len(imports), 3)
 	testing.expect_value(t, imports[0].path, "core:time")
@@ -206,7 +206,7 @@ test_parse_props_directive :: proc(t: ^testing.T) {
 	pos := 0
 	imports := make([dynamic]Import_Decl)
 	props := make([dynamic]Prop_Decl)
-	parse_imports_and_props(template, &pos, &imports, &props, "test.html")
+	parse_imports_and_props(template, &pos, &imports, &props, "test.odhtml")
 
 	testing.expect_value(t, len(props), 6)
 	testing.expect_value(t, props[0].name, "book")

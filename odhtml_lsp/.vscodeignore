@@ -1,0 +1,6 @@
+*.odin
+src/**
+node_modules/**
+.vscode/**
+tsconfig.json
+package-lock.json

@@ -1,0 +1,426 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Odin HTML",
+  "scopeName": "text.html.odhtml",
+  "patterns": [
+    { "include": "#escapes" },
+    { "include": "#comments" },
+    { "include": "#props-directive" },
+    { "include": "#import-directive" },
+    { "include": "#control-directive-blocks" },
+    { "include": "#control-directive-keywords" },
+    { "include": "#component-at-call" },
+    { "include": "#slot-tags" },
+    { "include": "#slot-curly" },
+    { "include": "#interpolation" },
+    { "include": "#component-custom-tags" },
+    { "include": "#html-tags" },
+    { "include": "#entities" }
+  ],
+  "repository": {
+    "escapes": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.odhtml",
+          "match": "\\{\\{|\\}\\}|@@"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.html",
+          "begin": "<!--",
+          "end": "-->",
+          "captures": {
+            "0": { "name": "punctuation.definition.comment.html" }
+          }
+        }
+      ]
+    },
+    "props-directive": {
+      "begin": "^\\s*(@props)\\s*(\\()",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.directive.props.odhtml" },
+        "2": { "name": "punctuation.section.parameters.begin.odhtml" }
+      },
+      "end": "\\)",
+      "endCaptures": {
+        "0": { "name": "punctuation.section.parameters.end.odhtml" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(:)",
+          "captures": {
+            "1": { "name": "variable.parameter.odhtml" },
+            "2": { "name": "punctuation.separator.colon.odhtml" }
+          }
+        },
+        {
+          "match": "\\b(string|int|i8|i16|i32|i64|i128|uint|u8|u16|u32|u64|u128|uintptr|f32|f64|bool|byte|rawptr)\\b",
+          "name": "entity.name.type.primitive.odin"
+        },
+        {
+          "match": "(\\[\\]|[a-zA-Z_][a-zA-Z0-9_]*\\.)?[A-Z][a-zA-Z0-9_]*",
+          "name": "entity.name.type.odin"
+        },
+        {
+          "match": "(=)",
+          "name": "keyword.operator.assignment.odhtml"
+        },
+        {
+          "name": "string.quoted.double.odhtml",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.odin" }]
+        },
+        {
+          "match": "\\b(true|false|nil)\\b",
+          "name": "constant.language.odin"
+        },
+        {
+          "match": "\\b\\d+(\\.\\d+)?\\b",
+          "name": "constant.numeric.odin"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.comma.odhtml"
+        }
+      ]
+    },
+    "import-directive": {
+      "match": "^\\s*(@import)\\s+(?:([a-zA-Z_][a-zA-Z0-9_]*)\\s+)?(\"[^\"]*\")",
+      "captures": {
+        "1": { "name": "keyword.control.directive.import.odhtml" },
+        "2": { "name": "variable.other.alias.odhtml" },
+        "3": { "name": "string.quoted.double.import.odhtml" }
+      }
+    },
+    "control-directive-blocks": {
+      "patterns": [
+        {
+          "name": "meta.directive.if.odhtml",
+          "begin": "(@if|@else\\s+if|@switch|@case)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.conditional.odhtml" }
+          },
+          "end": "(?<=\\})",
+          "patterns": [
+            {
+              "begin": "\\(",
+              "beginCaptures": {
+                "0": { "name": "punctuation.section.parens.begin.odhtml" }
+              },
+              "end": "\\)",
+              "endCaptures": {
+                "0": { "name": "punctuation.section.parens.end.odhtml" }
+              },
+              "patterns": [
+                { "include": "#odin-expression-elements" }
+              ]
+            },
+            {
+              "begin": "\\{",
+              "beginCaptures": {
+                "0": { "name": "punctuation.section.block.begin.odhtml" }
+              },
+              "end": "\\}",
+              "endCaptures": {
+                "0": { "name": "punctuation.section.block.end.odhtml" }
+              },
+              "patterns": [
+                { "include": "$self" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "meta.directive.else.odhtml",
+          "begin": "(@else|@default)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.conditional.odhtml" }
+          },
+          "end": "(?<=\\})",
+          "patterns": [
+            {
+              "begin": "\\{",
+              "beginCaptures": {
+                "0": { "name": "punctuation.section.block.begin.odhtml" }
+              },
+              "end": "\\}",
+              "endCaptures": {
+                "0": { "name": "punctuation.section.block.end.odhtml" }
+              },
+              "patterns": [
+                { "include": "$self" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "meta.directive.foreach.odhtml",
+          "begin": "(@foreach)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.loop.odhtml" }
+          },
+          "end": "(?<=\\})",
+          "patterns": [
+            {
+              "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*(?:\\s*,\\s*[a-zA-Z_][a-zA-Z0-9_]*)?)\\s+(in)\\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)",
+              "captures": {
+                "1": { "name": "variable.parameter.loop.odhtml" },
+                "2": { "name": "keyword.control.in.odhtml" },
+                "3": { "name": "variable.other.odin" }
+              }
+            },
+            {
+              "begin": "\\{",
+              "beginCaptures": {
+                "0": { "name": "punctuation.section.block.begin.odhtml" }
+              },
+              "end": "\\}",
+              "endCaptures": {
+                "0": { "name": "punctuation.section.block.end.odhtml" }
+              },
+              "patterns": [
+                { "include": "$self" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "meta.directive.for.odhtml",
+          "begin": "(@for)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.loop.odhtml" }
+          },
+          "end": "(?<=\\})",
+          "patterns": [
+            {
+              "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s+(in)\\s+(\\d+)\\s*(\\.\\.<|\\.\\.=)\\s*([a-zA-Z0-9_]+)",
+              "captures": {
+                "1": { "name": "variable.parameter.loop.odhtml" },
+                "2": { "name": "keyword.control.in.odhtml" },
+                "3": { "name": "constant.numeric.odin" },
+                "4": { "name": "keyword.operator.odin" },
+                "5": { "name": "variable.other.odin" }
+              }
+            },
+            {
+              "begin": "\\{",
+              "beginCaptures": {
+                "0": { "name": "punctuation.section.block.begin.odhtml" }
+              },
+              "end": "\\}",
+              "endCaptures": {
+                "0": { "name": "punctuation.section.block.end.odhtml" }
+              },
+              "patterns": [
+                { "include": "$self" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "control-directive-keywords": {
+      "patterns": [
+        {
+          "match": "(@else\\s+if|@if|@else|@switch|@case|@default|@foreach|@for)\\b",
+          "name": "keyword.control.conditional.odhtml"
+        }
+      ]
+    },
+    "component-at-call": {
+      "begin": "(@[A-Z][a-zA-Z0-9_]*)\\s*(\\()",
+      "beginCaptures": {
+        "1": { "name": "entity.name.tag.component.odhtml" },
+        "2": { "name": "punctuation.section.arguments.begin.odhtml" }
+      },
+      "end": "\\)",
+      "endCaptures": {
+        "0": { "name": "punctuation.section.arguments.end.odhtml" }
+      },
+      "patterns": [
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(:)",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.prop.odhtml" },
+            "2": { "name": "punctuation.separator.colon.odhtml" }
+          }
+        },
+        { "include": "#odin-expression-elements" }
+      ]
+    },
+    "slot-tags": {
+      "patterns": [
+        {
+          "match": "(</?)(slot(?::[a-zA-Z0-9_]+)?)(>)",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.begin.html" },
+            "2": { "name": "entity.name.tag.slot.odhtml" },
+            "3": { "name": "punctuation.definition.tag.end.html" }
+          }
+        }
+      ]
+    },
+    "slot-curly": {
+      "patterns": [
+        {
+          "match": "(\\{)(slot(?::[a-zA-Z0-9_]+)?)(?:\\s*(\\?\\?)\\s*([a-zA-Z_][a-zA-Z0-9_]*))?(\\})",
+          "captures": {
+            "1": { "name": "punctuation.section.embedded.begin.odhtml" },
+            "2": { "name": "variable.language.slot.odhtml" },
+            "3": { "name": "keyword.operator.fallback.odhtml" },
+            "4": { "name": "variable.other.odhtml" },
+            "5": { "name": "punctuation.section.embedded.end.odhtml" }
+          }
+        }
+      ]
+    },
+    "interpolation": {
+      "begin": "(#)?(\\{)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.interpolation.odhtml" },
+        "2": { "name": "punctuation.section.embedded.begin.odhtml" }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": { "name": "punctuation.section.embedded.end.odhtml" }
+      },
+      "patterns": [
+        { "include": "#odin-expression-elements" }
+      ]
+    },
+    "component-custom-tags": {
+      "patterns": [
+        {
+          "begin": "(<)([A-Z][a-zA-Z0-9_]*)\\b",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.tag.begin.html" },
+            "2": { "name": "entity.name.tag.component.odhtml" }
+          },
+          "end": "(/?>)",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.tag.end.html" }
+          },
+          "patterns": [
+            { "include": "#html-attribute" }
+          ]
+        },
+        {
+          "match": "(</)([A-Z][a-zA-Z0-9_]*)(>)",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.begin.html" },
+            "2": { "name": "entity.name.tag.component.odhtml" },
+            "3": { "name": "punctuation.definition.tag.end.html" }
+          }
+        }
+      ]
+    },
+    "html-tags": {
+      "patterns": [
+        {
+          "begin": "(<)(!DOCTYPE\\b)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.tag.begin.html" },
+            "2": { "name": "keyword.declaration.doctype.html" }
+          },
+          "end": "(>)",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.tag.end.html" }
+          },
+          "patterns": [
+            { "include": "#html-attribute" }
+          ]
+        },
+        {
+          "begin": "(</?)([a-z0-9\\-]+)\\b",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.tag.begin.html" },
+            "2": { "name": "entity.name.tag.html" }
+          },
+          "end": "(/?>)",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.tag.end.html" }
+          },
+          "patterns": [
+            { "include": "#html-attribute" }
+          ]
+        }
+      ]
+    },
+    "html-attribute": {
+      "patterns": [
+        {
+          "match": "\\b([a-zA-Z0-9\\-_:]+)(?:(=)(\"[^\"]*\"|'[^']*'|[^\\s>]+))?",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.html" },
+            "2": { "name": "punctuation.separator.key-value.html" },
+            "3": { "name": "string.quoted.html" }
+          }
+        }
+      ]
+    },
+    "odin-expression-elements": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.odin",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.odin" }]
+        },
+        {
+          "name": "string.quoted.single.odin",
+          "begin": "'",
+          "end": "'",
+          "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.odin" }]
+        },
+        {
+          "match": "\\b(true|false|nil)\\b",
+          "name": "constant.language.odin"
+        },
+        {
+          "match": "\\b(len|cap|int|string|bool|cast|transmute|size_of|type_of|offset_of)\\b",
+          "name": "support.function.builtin.odin"
+        },
+        {
+          "match": "\\b\\d+(\\.\\d+)?\\b",
+          "name": "constant.numeric.odin"
+        },
+        {
+          "match": "(\\.\\.<|\\.\\.=|==|!=|<=|>=|&&|\\|\\||\\?\\?|\\+|-|\\*|/|%|<|>|!)",
+          "name": "keyword.operator.odin"
+        },
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "variable.other.odin" },
+            "2": { "name": "variable.other.property.odin" }
+          }
+        },
+        {
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b",
+          "name": "variable.other.odin"
+        },
+        {
+          "match": "\\.",
+          "name": "punctuation.accessor.odin"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.comma.odin"
+        }
+      ]
+    },
+    "entities": {
+      "patterns": [
+        {
+          "match": "(&[a-zA-Z0-9]+;|&#[0-9]+;|&#x[0-9a-fA-F]+;)",
+          "name": "constant.character.entity.html"
+        }
+      ]
+    }
+  }
+}

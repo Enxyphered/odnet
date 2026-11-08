@@ -1847,7 +1847,7 @@ Target :: struct {
 	pkg_name:     string,
 }
 
-has_html_files :: proc(dir: string) -> bool {
+has_template_files :: proc(dir: string) -> bool {
 	f, err := os.open(dir)
 	if err != nil do return false
 	defer os.close(f)
@@ -1856,7 +1856,7 @@ has_html_files :: proc(dir: string) -> bool {
 	if read_err != nil do return false
 
 	for fi in fis {
-		if fi.type != .Directory && strings.has_suffix(fi.name, ".html") {
+		if fi.type != .Directory && (strings.has_suffix(fi.name, ".odhtml") || strings.has_suffix(fi.name, ".html")) {
 			return true
 		}
 	}
@@ -1914,7 +1914,7 @@ find_template_targets :: proc(current_dir: string, targets: ^[dynamic]Target) {
 	candidates := [2]string{"templates", "template"}
 	for cand in candidates {
 		t_path, _ := filepath.join({current_dir, cand}, context.temp_allocator)
-		if os.is_dir(t_path) && has_html_files(t_path) {
+		if os.is_dir(t_path) && has_template_files(t_path) {
 			pkg := detect_package_name(current_dir)
 			out_file, _ := filepath.join({current_dir, "template_gen.odin"}, context.temp_allocator)
 			append(targets, Target{
@@ -1960,8 +1960,11 @@ compile_templates :: proc(in_dir: string, out_file: string, pkg_name: string) ->
 	defer delete(components)
 
 	for fi in fis {
-		if strings.has_suffix(fi.name, ".html") {
-			base := fi.name[:len(fi.name) - 5]
+		is_odhtml := strings.has_suffix(fi.name, ".odhtml")
+		is_html := strings.has_suffix(fi.name, ".html")
+		if is_odhtml || is_html {
+			ext_len := len(".odhtml") if is_odhtml else len(".html")
+			base := fi.name[:len(fi.name) - ext_len]
 			full_path, _ := filepath.join({in_dir, fi.name})
 			data, file_read_err := os.read_entire_file(full_path, context.allocator)
 			if file_read_err != nil {
@@ -2190,7 +2193,7 @@ main :: proc() {
 	}
 
 	fmt.println("====================================================")
-	fmt.println("  odnetgen: HTML Component Compiler")
+	fmt.println("  odnetgen: odhtml Component Compiler")
 	fmt.println("====================================================")
 
 	if in_dir != "" {
@@ -2205,13 +2208,13 @@ main :: proc() {
 		return
 	}
 
-	// Auto-discovery mode: scan for folders containing a 'template' or 'templates' subfolder with .html files
+	// Auto-discovery mode: scan for folders containing a 'template' or 'templates' subfolder with .odhtml or .html files
 	targets := make([dynamic]Target)
 	defer delete(targets)
 	find_template_targets(".", &targets)
 
 	if len(targets) == 0 {
-		fmt.println("[WARNING] No folders found containing a 'template' or 'templates' subfolder with .html files.")
+		fmt.println("[WARNING] No folders found containing a 'template' or 'templates' subfolder with .odhtml or .html files.")
 		return
 	}
 
