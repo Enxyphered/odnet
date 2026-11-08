@@ -31,7 +31,7 @@ fast_write_str :: #force_inline proc(buf: []u8, offset: int, s: string) -> int {
 	return offset + n
 }
 
-// Serializes an HTTP/1.1 response into the destination buffer without heap allocations.
+// Serializes an HTTP/1.1 response into the destination buffer.
 serialize_response :: proc(res: ^Response, out_buf: []u8) -> (bytes_written: int, ok: bool) {
 	if len(out_buf) < 512 do return 0, false
 

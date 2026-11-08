@@ -27,6 +27,46 @@ format_four_digits :: #force_inline proc(buf: []u8, offset: int, val: int) {
 	buf[offset + 3] = u8('0' + val % 10)
 }
 
+format_http_date_time :: proc(t: time.Time, buf: []u8) -> string {
+	if len(buf) < 29 do return ""
+
+	y, m, d := time.date(t)
+	w := time.weekday(t)
+	h, min, s := time.clock(t)
+
+	day_str := DAYS[int(w)]
+	buf[0] = day_str[0]
+	buf[1] = day_str[1]
+	buf[2] = day_str[2]
+	buf[3] = ','
+	buf[4] = ' '
+
+	format_two_digits(buf, 5, d)
+	buf[7] = ' '
+
+	month_str := MONTHS[int(m) - 1]
+	buf[8]  = month_str[0]
+	buf[9]  = month_str[1]
+	buf[10] = month_str[2]
+	buf[11] = ' '
+
+	format_four_digits(buf, 12, y)
+	buf[16] = ' '
+
+	format_two_digits(buf, 17, h)
+	buf[19] = ':'
+	format_two_digits(buf, 20, min)
+	buf[22] = ':'
+	format_two_digits(buf, 23, s)
+	buf[25] = ' '
+
+	buf[26] = 'G'
+	buf[27] = 'M'
+	buf[28] = 'T'
+
+	return string(buf[:29])
+}
+
 update_date_cache :: proc() -> string {
 	now := time.now()
 	sec := time.to_unix_nanoseconds(now) / 1e9
@@ -43,43 +83,6 @@ update_date_cache :: proc() -> string {
 	}
 
 	global_date_cache.last_sec = sec
-
-	y, m, d := time.date(now)
-	w := time.weekday(now)
-	h, min, s := time.clock(now)
-
-	buf := &global_date_cache.buffer
-
-	day_str := DAYS[int(w)]
-	buf[0] = day_str[0]
-	buf[1] = day_str[1]
-	buf[2] = day_str[2]
-	buf[3] = ','
-	buf[4] = ' '
-
-	format_two_digits(buf[:], 5, d)
-	buf[7] = ' '
-
-	month_str := MONTHS[int(m) - 1]
-	buf[8]  = month_str[0]
-	buf[9]  = month_str[1]
-	buf[10] = month_str[2]
-	buf[11] = ' '
-
-	format_four_digits(buf[:], 12, y)
-	buf[16] = ' '
-
-	format_two_digits(buf[:], 17, h)
-	buf[19] = ':'
-	format_two_digits(buf[:], 20, min)
-	buf[22] = ':'
-	format_two_digits(buf[:], 23, s)
-	buf[25] = ' '
-
-	buf[26] = 'G'
-	buf[27] = 'M'
-	buf[28] = 'T'
-
-	global_date_cache.date_str = string(buf[:29])
+	global_date_cache.date_str = format_http_date_time(now, global_date_cache.buffer[:])
 	return global_date_cache.date_str
 }

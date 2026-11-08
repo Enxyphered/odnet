@@ -33,8 +33,7 @@ fast_parse_int :: proc(s: string) -> (int, bool) {
 	return val, true
 }
 
-// Zero-copy HTTP/1.1 Request Parser.
-// Slices strings directly out of the given socket buffer. Zero allocations.
+// HTTP/1.1 Request Parser.
 parse_request :: proc(buf: []u8, req: ^Request) -> (bytes_consumed: int, status: Parse_Status) {
 	n := len(buf)
 	if n < 4 do return 0, .Incomplete

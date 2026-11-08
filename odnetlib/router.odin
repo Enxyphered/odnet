@@ -1,6 +1,7 @@
 package odnetlib
 
 import "core:fmt"
+import "core:path/filepath"
 import "core:strings"
 
 Segment_Kind :: enum u8 {
@@ -27,9 +28,11 @@ Route :: struct {
 }
 
 Router :: struct {
-	routes:     [MAX_ROUTES]Route,
-	num_routes: int,
-	not_found:  Handler_Proc,
+	routes:            [MAX_ROUTES]Route,
+	num_routes:        int,
+	not_found:         Handler_Proc,
+	static_mounts:     [MAX_STATIC_MOUNTS]Static_Mount,
+	num_static_mounts: int,
 }
 
 default_not_found :: proc(req: ^Request, res: ^Response) {
@@ -39,6 +42,7 @@ default_not_found :: proc(req: ^Request, res: ^Response) {
 
 router_init :: proc(r: ^Router) {
 	r.num_routes = 0
+	r.num_static_mounts = 0
 	r.not_found = default_not_found
 }
 
@@ -135,7 +139,7 @@ router_add :: proc(r: ^Router, method: Method, pattern: string, handler: Handler
 		return false
 	}
 
-	// Startup Collision Check: runs ONCE at registration, 0 cost during requests
+	// Check for route collisions
 	conflicting, has_conflict := router_check_collision(r, method, pattern)
 	if has_conflict {
 		fmt.eprintln("\n================================================================================")
@@ -158,7 +162,7 @@ router_add :: proc(r: ^Router, method: Method, pattern: string, handler: Handler
 	return true
 }
 
-// Zero-allocation path segment scanner for incoming requests
+// Dynamic route segment matcher
 match_dynamic_route :: proc(route: ^Route, path: string, req: ^Request) -> bool {
 	s := path
 	if len(s) > 0 && s[0] == '/' do s = s[1:]
@@ -174,6 +178,7 @@ match_dynamic_route :: proc(route: ^Route, path: string, req: ^Request) -> bool 
 				break
 			}
 			part := s[start:i]
+			seg_start := start
 			start = i + 1
 
 			if seg_idx >= route.num_segments {
@@ -189,7 +194,7 @@ match_dynamic_route :: proc(route: ^Route, path: string, req: ^Request) -> bool 
 					return false
 				}
 			case .Param:
-				// Zero-copy parameter slice extracted directly from req.path
+				// Parameter slice extracted directly from req.path
 				if req.num_params < MAX_PARAMS {
 					req.params[req.num_params] = Param{
 						key   = seg.name,
@@ -199,6 +204,13 @@ match_dynamic_route :: proc(route: ^Route, path: string, req: ^Request) -> bool 
 				}
 			case .Wildcard:
 				// Matches rest of path
+				if req.num_params < MAX_PARAMS {
+					req.params[req.num_params] = Param{
+						key   = seg.name,
+						value = s[seg_start:],
+					}
+					req.num_params += 1
+				}
 				return true
 			}
 
@@ -214,13 +226,13 @@ match_dynamic_route :: proc(route: ^Route, path: string, req: ^Request) -> bool 
 	return false
 }
 
-// Ultra-fast zero-allocation route dispatcher
+// Route dispatcher
 router_dispatch :: proc(r: ^Router, req: ^Request, res: ^Response) {
 	response_init(res)
 	res.keep_alive = req.keep_alive
 	method_matched := false
 
-	// Tier 1: Fast Path for Exact Static Matches (5 - 10 nanoseconds)
+	// Static routes
 	for i in 0..<r.num_routes {
 		route := &r.routes[i]
 		if route.is_static && route.pattern == req.path {
@@ -232,7 +244,27 @@ router_dispatch :: proc(r: ^Router, req: ^Request, res: ^Response) {
 		}
 	}
 
-	// Tier 2: Dynamic Pattern Matching with Zero-Copy Parameter Extraction
+	// Static file mounts
+	for i in 0..<r.num_static_mounts {
+		mount := &r.static_mounts[i]
+		if req.method == .GET || req.method == .HEAD {
+			if strings.has_prefix(req.path, mount.route_prefix) {
+				rel_path := req.path[len(mount.route_prefix):]
+				clean_rel, ok := clean_relative_path(rel_path)
+				if !ok {
+					res.status = .Forbidden
+					response_set_body_string(res, "403 Forbidden: Invalid Path\n", "text/plain; charset=utf-8")
+					return
+				}
+				full_path, _ := filepath.join({mount.fs_dir, clean_rel}, context.temp_allocator)
+				if serve_file(req, res, full_path, mount.options) {
+					return
+				}
+			}
+		}
+	}
+
+	// Dynamic routes
 	for i in 0..<r.num_routes {
 		route := &r.routes[i]
 		if !route.is_static {

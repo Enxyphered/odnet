@@ -3,11 +3,12 @@ package main
 import "core:fmt"
 import "core:os"
 import "core:strconv"
+import "core:strings"
 
 import http "../odnetlib"
 
 // -----------------------------------------------------------------------------
-// Route Handlers (Managed by the Client Application)
+// Route Handlers
 // -----------------------------------------------------------------------------
 
 handle_index :: proc(req: ^http.Request, res: ^http.Response) {
@@ -19,26 +20,40 @@ handle_index :: proc(req: ^http.Request, res: ^http.Response) {
 		"Endpoints available:\n" +
 		"  GET  /plaintext\n" +
 		"  GET  /json\n" +
-		"  GET  /books/{shortId}/delete   (Dynamic route)\n" +
-		"  GET  /users/{id}/profile       (Dynamic route)\n" +
+		"  GET  /home\n" +
+		"  GET  /books/{shortId}/delete\n" +
+		"  GET  /users/{id}/profile\n" +
 		"  POST /echo\n",
 		"text/plain; charset=utf-8",
 	)
 }
 
 handle_plaintext :: proc(req: ^http.Request, res: ^http.Response) {
-	// Standard TechEmpower Plaintext Benchmark specification
 	http.response_set_body_string(res, "Hello, World!", "text/plain")
 }
 
 handle_json :: proc(req: ^http.Request, res: ^http.Response) {
-	// Standard TechEmpower JSON Benchmark specification
 	http.response_set_json(res, "{\"message\":\"Hello, World!\",\"framework\":\"odnetlib\"}")
 }
 
+handle_home :: proc(req: ^http.Request, res: ^http.Response) {
+	b := strings.builder_make(context.temp_allocator)
+	render_home(&b, username = "Shaamil", name = "Shaamil", badge_id = "007")
+	http.response_set_html(res, strings.to_string(b))
+}
+
+handle_update_greeting :: proc(req: ^http.Request, res: ^http.Response) {
+	title, _ := http.get_form_value(req, "title")
+	name, _ := http.get_form_value(req, "name")
+	if len(title) == 0 do title = "Mr."
+	if len(name) == 0 do name = "Shaamil"
+
+	b := strings.builder_make(context.temp_allocator)
+	render_greet(&b, title = title, name = name, badge_id = "007")
+	http.response_set_html(res, strings.to_string(b))
+}
+
 handle_delete_book :: proc(req: ^http.Request, res: ^http.Response) {
-	// Zero-allocation dynamic route parameter extraction!
-	// shortId is a direct slice into req.path—no strings are allocated on the heap.
 	short_id, ok := http.get_param(req, "shortId")
 	if !ok {
 		res.status = .Bad_Request
@@ -46,7 +61,6 @@ handle_delete_book :: proc(req: ^http.Request, res: ^http.Response) {
 		return
 	}
 
-	// Use connection scratch arena to format dynamic response without heap allocation
 	resp_text := fmt.tprintf("Book with ID '%s' has been queued for deletion.\n", short_id)
 	http.response_set_body_string(res, resp_text)
 	res.status = .OK
@@ -105,35 +119,43 @@ main :: proc() {
 	server: http.Server
 	http.server_init(&server, cfg)
 
-	// 1. Static Routes (Handled via instant Tier 1 string comparison)
+	// 1. Static Routes
 	http.server_get(&server, "/", handle_index)
 	http.server_get(&server, "/plaintext", handle_plaintext)
 	http.server_get(&server, "/json", handle_json)
+	http.server_get(&server, "/home", handle_home)
+	http.server_post(&server, "/api/greeting", handle_update_greeting)
+	http.server_get(&server, "/api/greeting", handle_update_greeting)
 
-	// 2. Dynamic Routes (Handled via zero-allocation Tier 2 segment extraction)
+	// 2. Static File Serving
+	http.server_static(&server, "/static", "odnetclient/static")
+
+	// 3. Dynamic Routes
 	http.server_get(&server, "/books/{shortId}/delete", handle_delete_book)
 	http.server_get(&server, "/users/{id}/profile", handle_user_profile)
 	http.server_post(&server, "/echo", handle_echo)
 
-	// 3. Custom 404 Handler
+	// 4. Custom 404 Handler
 	http.server_not_found(&server, handle_custom_404)
 
 	fmt.println("================================================================================")
 	fmt.println("             odnetclient: Custom Client Application using odnetlib              ")
 	fmt.println("================================================================================")
 	when ODIN_OS == .Windows {
-		fmt.println("  Active Engine    : Windows IOCP (I/O Completion Ports + AcceptEx)")
+		fmt.println("  Active Engine    : Windows IOCP")
 	} else when ODIN_OS == .Linux {
-		fmt.println("  Active Engine    : Linux epoll (Edge-Triggered EPOLLET + SO_REUSEPORT)")
+		fmt.println("  Active Engine    : Linux epoll")
 	}
 	fmt.printf("  Port             : %d\n", cfg.port)
 	fmt.println("  Registered Routes:")
-	fmt.println("    GET  /                         (Static)")
-	fmt.println("    GET  /plaintext                (Static)")
-	fmt.println("    GET  /json                     (Static)")
-	fmt.println("    GET  /books/{shortId}/delete   (Dynamic zero-copy param)")
-	fmt.println("    GET  /users/{id}/profile       (Dynamic zero-copy param)")
-	fmt.println("    POST /echo                     (Static payload echo)")
+	fmt.println("    GET  /")
+	fmt.println("    GET  /plaintext")
+	fmt.println("    GET  /json")
+	fmt.println("    GET  /home")
+	fmt.println("    GET  /static/*")
+	fmt.println("    GET  /books/{shortId}/delete")
+	fmt.println("    GET  /users/{id}/profile")
+	fmt.println("    POST /echo")
 	fmt.println("================================================================================\n")
 
 	// Start server (blocking call)

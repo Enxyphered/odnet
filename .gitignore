@@ -1,3 +1,13 @@
+# Build output directory
+output/
+
+# Generated styles
+**/Styles.css
+**/styles.css
+
+# Generated code
+*_gen.odin
+
 # Compiled binaries
 *.exe
 *.dll

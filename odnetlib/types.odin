@@ -1,5 +1,6 @@
 package odnetlib
 
+import "core:strings"
 import "core:sync"
 
 // HTTP Methods
@@ -96,13 +97,13 @@ Header :: struct {
 // Route parameter extracted from dynamic path templates (e.g. {shortId} -> "abc-123")
 Param :: struct {
 	key:   string,
-	value: string, // Direct slice into req.path (zero allocation)
+	value: string, // Direct slice into req.path
 }
 
 MAX_HEADERS :: 64
 MAX_PARAMS  :: 16
 
-// Request parsed from raw input buffer without heap allocations.
+// Request parsed from raw input buffer.
 Request :: struct {
 	method:         Method,
 	raw_method:     string,
@@ -137,6 +138,75 @@ get_header :: proc(req: ^Request, key: string) -> (string, bool) {
 	return "", false
 }
 
+hex_to_int :: #force_inline proc(c: u8) -> int {
+	if c >= '0' && c <= '9' do return int(c - '0')
+	if c >= 'a' && c <= 'f' do return int(c - 'a' + 10)
+	if c >= 'A' && c <= 'F' do return int(c - 'A' + 10)
+	return -1
+}
+
+url_decode :: proc(s: string, allocator := context.temp_allocator) -> string {
+	b := strings.builder_make(allocator)
+	for i := 0; i < len(s); i += 1 {
+		c := s[i]
+		if c == '+' {
+			strings.write_byte(&b, ' ')
+		} else if c == '%' && i + 2 < len(s) {
+			h1 := hex_to_int(s[i + 1])
+			h2 := hex_to_int(s[i + 2])
+			if h1 >= 0 && h2 >= 0 {
+				strings.write_byte(&b, u8((h1 << 4) | h2))
+				i += 2
+			} else {
+				strings.write_byte(&b, '%')
+			}
+		} else {
+			strings.write_byte(&b, c)
+		}
+	}
+	return strings.to_string(b)
+}
+
+get_query_param :: proc(query_str: string, key: string, allocator := context.temp_allocator) -> (string, bool) {
+	s := query_str
+	for len(s) > 0 {
+		amp_idx := strings.index_byte(s, '&')
+		pair := ""
+		if amp_idx >= 0 {
+			pair = s[:amp_idx]
+			s = s[amp_idx + 1:]
+		} else {
+			pair = s
+			s = ""
+		}
+		eq_idx := strings.index_byte(pair, '=')
+		if eq_idx >= 0 {
+			k := pair[:eq_idx]
+			v := pair[eq_idx + 1:]
+			if k == key {
+				return url_decode(v, allocator), true
+			}
+		} else if pair == key {
+			return "", true
+		}
+	}
+	return "", false
+}
+
+get_form_value :: proc(req: ^Request, key: string, allocator := context.temp_allocator) -> (string, bool) {
+	if len(req.body) > 0 {
+		if val, ok := get_query_param(string(req.body), key, allocator); ok {
+			return val, true
+		}
+	}
+	if len(req.query) > 0 {
+		if val, ok := get_query_param(req.query, key, allocator); ok {
+			return val, true
+		}
+	}
+	return "", false
+}
+
 // Response structure populated by route handlers.
 Response :: struct {
 	status:        Status_Code,
@@ -165,16 +235,25 @@ response_add_header :: proc(res: ^Response, name: string, value: string) {
 response_set_body :: proc(res: ^Response, body: []u8, content_type: string = "text/plain; charset=utf-8") {
 	res.body = body
 	res.content_type = content_type
+	if res.status == Status_Code(0) do res.status = .OK
 }
 
 response_set_body_string :: proc(res: ^Response, body_str: string, content_type: string = "text/plain; charset=utf-8") {
 	res.body = transmute([]u8)body_str
 	res.content_type = content_type
+	if res.status == Status_Code(0) do res.status = .OK
 }
 
 response_set_json :: proc(res: ^Response, json_str: string) {
 	res.body = transmute([]u8)json_str
 	res.content_type = "application/json"
+	if res.status == Status_Code(0) do res.status = .OK
+}
+
+response_set_html :: proc(res: ^Response, html_str: string) {
+	res.body = transmute([]u8)html_str
+	res.content_type = "text/html; charset=utf-8"
+	if res.status == Status_Code(0) do res.status = .OK
 }
 
 Handler_Proc :: proc(req: ^Request, res: ^Response)
