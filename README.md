@@ -61,7 +61,9 @@ The build scripts handle the complete pipeline:
 | **Variables** | `{name}` | `<h1>Hello, {title} {name}!</h1>` |
 | **Component Call** | `@Component(...)` | `@Greet(title: "Mr.", name: name, badge_id: "007")` |
 | **Tag Style** | `<Component ... />` | `<Button label="Submit" variant="primary" />` |
-| **Slots (Children)** | `{slot}` & `@Component(...) { ... }` | `@Card(title: "Overview") { <p>Slot content</p> }` |
+| **Default Slot** | `{slot}` & `@Component(...) { ... }` | `@Card(title: "Overview") { <p>Slot content</p> }` |
+| **Named Slots** | `{slot:name}` & `<slot:name>` / `@slot(name)` | `<Card><slot:actions><button>OK</button></slot:actions></Card>` |
+| **Polymorphic / Fallback Slots** | `{slot:name ?? var}` or `{slot:name \|\| "Default"}` | `<h3>{slot:title ?? title}</h3>` |
 | **Escaped Braces** | `{{` / `}}` or `\{` / `\}` | `body {{ margin: 0; }}` renders literal `{ margin: 0; }` |
 | **Escaped At** | `@@` or `\@` | `user@@example.com` renders literal `@` |
 

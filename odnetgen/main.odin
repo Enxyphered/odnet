@@ -10,6 +10,7 @@ Node_Kind :: enum {
 	Text,
 	Var,
 	Slot,
+	Slot_Block,
 	Component_Call,
 }
 
@@ -22,6 +23,8 @@ Prop :: struct {
 Node :: struct {
 	kind:           Node_Kind,
 	text:           string,
+	slot_name:      string,
+	fallback_nodes: [dynamic]Node,
 	component_name: string,
 	props:          [dynamic]Prop,
 	has_slot_block: bool,
@@ -29,12 +32,13 @@ Node :: struct {
 }
 
 Component :: struct {
-	name:      string, // lowercase snake_case
-	raw_name:  string,
-	filename:  string,
-	nodes:     [dynamic]Node,
-	has_slot:  bool,
-	all_vars:  [dynamic]string,
+	name:       string, // lowercase snake_case
+	raw_name:   string,
+	filename:   string,
+	nodes:      [dynamic]Node,
+	has_slot:   bool,
+	slot_names: [dynamic]string,
+	all_vars:   [dynamic]string,
 }
 
 is_alpha :: proc(c: u8) -> bool {
@@ -108,6 +112,15 @@ is_valid_ident :: proc(s: string) -> bool {
 	return true
 }
 
+is_valid_slot_name :: proc(s: string) -> bool {
+	if len(s) == 0 do return false
+	if !is_alpha(s[0]) && s[0] != '_' do return false
+	for i in 1 ..< len(s) {
+		if !is_alphanumeric(s[i]) && s[i] != '_' do return false
+	}
+	return true
+}
+
 get_root_ident :: proc(s: string) -> string {
 	dot_idx := strings.index_byte(s, '.')
 	if dot_idx >= 0 {
@@ -117,7 +130,7 @@ get_root_ident :: proc(s: string) -> string {
 }
 
 // Recursive parser
-parse_nodes :: proc(src: string, pos: ^int, stop_char: u8 = 0, stop_tag: string = "") -> [dynamic]Node {
+parse_nodes :: proc(src: string, pos: ^int, stop_char: u8 = 0, stop_tag: string = "", stop_tag2: string = "") -> [dynamic]Node {
 	nodes := make([dynamic]Node)
 	text_buf := strings.builder_make()
 	defer strings.builder_destroy(&text_buf)
@@ -138,6 +151,10 @@ parse_nodes :: proc(src: string, pos: ^int, stop_char: u8 = 0, stop_tag: string 
 			pos^ += len(stop_tag)
 			break
 		}
+		if len(stop_tag2) > 0 && strings.has_prefix(src[pos^:], stop_tag2) {
+			pos^ += len(stop_tag2)
+			break
+		}
 
 		// 0. Check for backslash escaping: \{, \}, \@, \\
 		if src[pos^] == '\\' && pos^ + 1 < len(src) {
@@ -149,19 +166,12 @@ parse_nodes :: proc(src: string, pos: ^int, stop_char: u8 = 0, stop_tag: string 
 			}
 		}
 
-		// 1. Check for {{ (escaped brace) or {slot} or {var}
+		// 1. Check for {{ (escaped brace) or {slot...} or {var}
 		if src[pos^] == '{' {
 			if pos^ + 1 < len(src) && src[pos^ + 1] == '{' {
 				// Escaped {{ -> emit literal {
 				strings.write_byte(&text_buf, '{')
 				pos^ += 2
-				continue
-			}
-
-			if strings.has_prefix(src[pos^:], "{slot}") {
-				flush_text(&nodes, &text_buf)
-				append(&nodes, Node{kind = .Slot})
-				pos^ += 6
 				continue
 			}
 
@@ -176,10 +186,67 @@ parse_nodes :: proc(src: string, pos: ^int, stop_char: u8 = 0, stop_tag: string 
 			}
 
 			if end != -1 {
-				ident := strings.trim_space(src[pos^ + 1 : end])
-				if is_valid_ident(ident) {
+				inside := strings.trim_space(src[pos^ + 1 : end])
+
+				// Check if inside represents a slot expression
+				if inside == "slot" || strings.has_prefix(inside, "slot:") || strings.has_prefix(inside, "slot ") || strings.has_prefix(inside, "slot?") || strings.has_prefix(inside, "slot|") {
+					op_idx := -1
+					op_len := 0
+					idx_q := strings.index(inside, "??")
+					idx_p := strings.index(inside, "||")
+					if idx_q >= 0 {
+						op_idx = idx_q
+						op_len = 2
+					} else if idx_p >= 0 {
+						op_idx = idx_p
+						op_len = 2
+					}
+
+					slot_part := ""
+					fallback_part := ""
+					if op_idx >= 0 {
+						slot_part = strings.trim_space(inside[:op_idx])
+						fallback_part = strings.trim_space(inside[op_idx + op_len:])
+					} else {
+						slot_part = inside
+					}
+
+					raw_slot_name := ""
+					if strings.has_prefix(slot_part, "slot:") {
+						raw_slot_name = strings.trim_space(slot_part[5:])
+					} else if slot_part == "slot" {
+						raw_slot_name = ""
+					}
+
+					if raw_slot_name == "default" do raw_slot_name = ""
+
+					if raw_slot_name == "" || is_valid_slot_name(raw_slot_name) {
+						fallback_nodes := make([dynamic]Node)
+						if len(fallback_part) > 0 {
+							if (fallback_part[0] == '"' || fallback_part[0] == '\'') && len(fallback_part) >= 2 && fallback_part[len(fallback_part)-1] == fallback_part[0] {
+								raw_lit := fallback_part[1 : len(fallback_part)-1]
+								append(&fallback_nodes, Node{kind = .Text, text = strings.clone(raw_lit)})
+							} else if is_valid_ident(fallback_part) {
+								append(&fallback_nodes, Node{kind = .Var, text = strings.clone(fallback_part)})
+							}
+						}
+
+						flush_text(&nodes, &text_buf)
+						slot_name_sn := to_snake_case(raw_slot_name) if len(raw_slot_name) > 0 else ""
+						append(&nodes, Node{
+							kind = .Slot,
+							slot_name = slot_name_sn,
+							fallback_nodes = fallback_nodes,
+						})
+						pos^ = end + 1
+						continue
+					}
+				}
+
+				// Standard variable reference: {ident}
+				if is_valid_ident(inside) {
 					flush_text(&nodes, &text_buf)
-					append(&nodes, Node{kind = .Var, text = strings.clone(ident)})
+					append(&nodes, Node{kind = .Var, text = strings.clone(inside)})
 					pos^ = end + 1
 					continue
 				}
@@ -202,13 +269,64 @@ parse_nodes :: proc(src: string, pos: ^int, stop_char: u8 = 0, stop_tag: string 
 			continue
 		}
 
-		// 2. Check for @Component(...)
+		// 2. Check for @Component(...) or @slot(...)
 		if src[pos^] == '@' && pos^ + 1 < len(src) && is_alpha(src[pos^ + 1]) {
 			p := pos^ + 1
 			for p < len(src) && (is_alphanumeric(src[p]) || src[p] == '_') {
 				p += 1
 			}
 			comp_name := src[pos^ + 1 : p]
+
+			if comp_name == "slot" {
+				flush_text(&nodes, &text_buf)
+				p_skip := p
+				skip_whitespace(src, &p_skip)
+				slot_name := ""
+				if p_skip < len(src) && src[p_skip] == '(' {
+					p = p_skip + 1
+					skip_whitespace(src, &p)
+					if p < len(src) && (src[p] == '"' || src[p] == '\'') {
+						q := src[p]
+						p += 1
+						n_start := p
+						for p < len(src) && src[p] != q {
+							p += 1
+						}
+						slot_name = src[n_start:p]
+						if p < len(src) && src[p] == q do p += 1
+					} else {
+						n_start := p
+						for p < len(src) && (is_alphanumeric(src[p]) || src[p] == '_') {
+							p += 1
+						}
+						slot_name = src[n_start:p]
+					}
+					skip_whitespace(src, &p)
+					if p < len(src) && src[p] == ')' do p += 1
+				} else {
+					p = p_skip
+				}
+
+				if slot_name == "default" do slot_name = ""
+
+				skip_whitespace(src, &p)
+				children := make([dynamic]Node)
+				if p < len(src) && src[p] == '{' {
+					p += 1 // consume '{'
+					children = parse_nodes(src, &p, stop_char = '}')
+					if p < len(src) && src[p] == '}' do p += 1
+				}
+
+				slot_name_sn := to_snake_case(slot_name) if len(slot_name) > 0 else ""
+				append(&nodes, Node{
+					kind = .Slot_Block,
+					slot_name = slot_name_sn,
+					children = children,
+				})
+				pos^ = p
+				continue
+			}
+
 			p_skip := p
 			skip_whitespace(src, &p_skip)
 			if p_skip < len(src) && src[p_skip] == '(' {
@@ -283,7 +401,102 @@ parse_nodes :: proc(src: string, pos: ^int, stop_char: u8 = 0, stop_tag: string 
 			}
 		}
 
-		// 3. Check for <Component ... /> or <Component ...> ... </Component>
+		// 3. Check for <slot:...> or <slot name="..."> or <slot>
+		if src[pos^] == '<' && strings.has_prefix(src[pos^:], "<slot:") {
+			p := pos^ + 6
+			name_start := p
+			for p < len(src) && (is_alphanumeric(src[p]) || src[p] == '_') {
+				p += 1
+			}
+			raw_slot_name := src[name_start:p]
+			if raw_slot_name == "default" do raw_slot_name = ""
+
+			is_self_closing := false
+			for p < len(src) && src[p] != '>' {
+				if src[p] == '/' && p + 1 < len(src) && src[p + 1] == '>' {
+					is_self_closing = true
+					p += 2
+					break
+				}
+				p += 1
+			}
+			if !is_self_closing && p < len(src) && src[p] == '>' do p += 1
+
+			flush_text(&nodes, &text_buf)
+
+			children := make([dynamic]Node)
+			if !is_self_closing {
+				stop1 := fmt.tprintf("</slot:%s>", raw_slot_name if len(raw_slot_name) > 0 else "default")
+				stop2 := "</slot>"
+				children = parse_nodes(src, &p, stop_tag = stop1, stop_tag2 = stop2)
+			}
+
+			slot_name_sn := to_snake_case(raw_slot_name) if len(raw_slot_name) > 0 else ""
+			append(&nodes, Node{
+				kind = .Slot_Block,
+				slot_name = slot_name_sn,
+				children = children,
+			})
+			pos^ = p
+			continue
+		}
+
+		if src[pos^] == '<' && (strings.has_prefix(src[pos^:], "<slot ") || strings.has_prefix(src[pos^:], "<slot>")) {
+			p := pos^ + 5
+			raw_slot_name := ""
+			is_self_closing := false
+
+			for p < len(src) && src[p] != '>' {
+				skip_whitespace(src, &p)
+				if p >= len(src) do break
+				if src[p] == '/' && p + 1 < len(src) && src[p + 1] == '>' {
+					is_self_closing = true
+					p += 2
+					break
+				}
+				if src[p] == '>' {
+					p += 1
+					break
+				}
+
+				if strings.has_prefix(src[p:], "name=") {
+					p += 5
+					skip_whitespace(src, &p)
+					if p < len(src) && (src[p] == '"' || src[p] == '\'') {
+						q := src[p]
+						p += 1
+						n_start := p
+						for p < len(src) && src[p] != q {
+							p += 1
+						}
+						raw_slot_name = src[n_start:p]
+						if p < len(src) && src[p] == q do p += 1
+					}
+				} else {
+					p += 1
+				}
+			}
+			if !is_self_closing && p < len(src) && src[p] == '>' do p += 1
+
+			flush_text(&nodes, &text_buf)
+
+			children := make([dynamic]Node)
+			if !is_self_closing {
+				children = parse_nodes(src, &p, stop_tag = "</slot>")
+			}
+
+			if raw_slot_name == "default" do raw_slot_name = ""
+			slot_name_sn := to_snake_case(raw_slot_name) if len(raw_slot_name) > 0 else ""
+			append(&nodes, Node{
+				kind = .Slot_Block,
+				slot_name = slot_name_sn,
+				children = children,
+			})
+			pos^ = p
+			continue
+		}
+
+		// 4. Check for <Component ... /> or <Component ...> ... </Component>
 		if src[pos^] == '<' && pos^ + 1 < len(src) && (src[pos^ + 1] >= 'A' && src[pos^ + 1] <= 'Z') {
 			p := pos^ + 1
 			for p < len(src) && (is_alphanumeric(src[p]) || src[p] == '_') {
@@ -375,15 +588,39 @@ parse_nodes :: proc(src: string, pos: ^int, stop_char: u8 = 0, stop_tag: string 
 	return nodes
 }
 
-// Check if tree contains .Slot
+// Check if tree contains .Slot or .Slot_Block defined directly in component
 has_slot_node :: proc(nodes: []Node) -> bool {
 	for node in nodes {
-		if node.kind == .Slot do return true
-		if len(node.children) > 0 {
+		if node.kind == .Slot || node.kind == .Slot_Block do return true
+		if node.kind != .Component_Call && len(node.children) > 0 {
 			if has_slot_node(node.children[:]) do return true
+		}
+		if len(node.fallback_nodes) > 0 {
+			if has_slot_node(node.fallback_nodes[:]) do return true
 		}
 	}
 	return false
+}
+
+// Collect all unique slot names defined in component (excluding calls to other components)
+collect_slot_names :: proc(nodes: []Node, slot_names: ^[dynamic]string) {
+	for node in nodes {
+		switch node.kind {
+		case .Slot, .Slot_Block:
+			sn := node.slot_name
+			if !slice.contains(slot_names^[:], sn) {
+				append(slot_names, strings.clone(sn))
+			}
+			if len(node.children) > 0 {
+				collect_slot_names(node.children[:], slot_names)
+			}
+			if len(node.fallback_nodes) > 0 {
+				collect_slot_names(node.fallback_nodes[:], slot_names)
+			}
+		case .Component_Call, .Text, .Var:
+			// none
+		}
+	}
 }
 
 // Collect all variable references in nodes
@@ -394,6 +631,14 @@ collect_vars :: proc(nodes: []Node, vars: ^[dynamic]string) {
 			root := get_root_ident(node.text)
 			if !slice.contains(vars^[:], root) {
 				append(vars, strings.clone(root))
+			}
+		case .Slot:
+			if len(node.fallback_nodes) > 0 {
+				collect_vars(node.fallback_nodes[:], vars)
+			}
+		case .Slot_Block:
+			if len(node.children) > 0 {
+				collect_vars(node.children[:], vars)
 			}
 		case .Component_Call:
 			for prop in node.props {
@@ -409,10 +654,94 @@ collect_vars :: proc(nodes: []Node, vars: ^[dynamic]string) {
 			if len(node.children) > 0 {
 				collect_vars(node.children[:], vars)
 			}
-		case .Text, .Slot:
+		case .Text:
 			// none
 		}
 	}
+}
+
+Slot_Group :: struct {
+	name:   string,
+	nodes:  [dynamic]Node,
+	vars:   [dynamic]string,
+	ctx_id: int,
+}
+
+// Group children of a Component_Call into slot payloads
+group_slots :: proc(children: []Node) -> [dynamic]Slot_Group {
+	groups := make([dynamic]Slot_Group)
+
+	has_slot_blocks := false
+	for child in children {
+		if child.kind == .Slot_Block {
+			has_slot_blocks = true
+			break
+		}
+	}
+
+	if !has_slot_blocks {
+		if len(children) > 0 {
+			default_nodes := make([dynamic]Node)
+			for c in children {
+				append(&default_nodes, c)
+			}
+			append(&groups, Slot_Group{name = "", nodes = default_nodes})
+		}
+		return groups
+	}
+
+	default_nodes := make([dynamic]Node)
+	has_non_whitespace_default := false
+
+	for child in children {
+		if child.kind == .Slot_Block {
+			found_idx := -1
+			for g, i in groups {
+				if g.name == child.slot_name {
+					found_idx = i
+					break
+				}
+			}
+			if found_idx >= 0 {
+				for c in child.children {
+					append(&groups[found_idx].nodes, c)
+				}
+			} else {
+				slot_nodes := make([dynamic]Node)
+				for c in child.children {
+					append(&slot_nodes, c)
+				}
+				append(&groups, Slot_Group{name = strings.clone(child.slot_name), nodes = slot_nodes})
+			}
+		} else {
+			append(&default_nodes, child)
+			if child.kind != .Text || len(strings.trim_space(child.text)) > 0 {
+				has_non_whitespace_default = true
+			}
+		}
+	}
+
+	if has_non_whitespace_default {
+		found_default := -1
+		for g, i in groups {
+			if g.name == "" {
+				found_default = i
+				break
+			}
+		}
+		if found_default >= 0 {
+			for c in default_nodes {
+				append(&groups[found_default].nodes, c)
+			}
+			delete(default_nodes)
+		} else {
+			append(&groups, Slot_Group{name = "", nodes = default_nodes})
+		}
+	} else {
+		delete(default_nodes)
+	}
+
+	return groups
 }
 
 // Global slot counter for unique context struct names
@@ -440,77 +769,109 @@ emit_nodes :: proc(b: ^strings.Builder, nodes: []Node, inside_slot: bool, parent
 			}
 			strings.write_string(b, ")\n")
 		case .Slot:
-			strings.write_string(b, "\tif slot != nil {\n\t\tslot(b, user_data)\n\t}\n")
+			slot_var := "slot" if node.slot_name == "" else fmt.tprintf("slot_%s", node.slot_name)
+			data_var := "user_data" if node.slot_name == "" else fmt.tprintf("slot_%s_data", node.slot_name)
+
+			fmt.sbprintf(b, "\tif %s != nil ", slot_var)
+			strings.write_string(b, "{\n\t\t")
+			fmt.sbprintf(b, "%s(b, %s)\n", slot_var, data_var)
+			if len(node.fallback_nodes) > 0 {
+				strings.write_string(b, "\t} else {\n")
+				emit_nodes(b, node.fallback_nodes[:], inside_slot, parent_vars)
+				strings.write_string(b, "\t}\n")
+			} else {
+				strings.write_string(b, "\t}\n")
+			}
+		case .Slot_Block:
+			slot_var := "slot" if node.slot_name == "" else fmt.tprintf("slot_%s", node.slot_name)
+			data_var := "user_data" if node.slot_name == "" else fmt.tprintf("slot_%s_data", node.slot_name)
+
+			fmt.sbprintf(b, "\tif %s != nil ", slot_var)
+			strings.write_string(b, "{\n\t\t")
+			fmt.sbprintf(b, "%s(b, %s)\n", slot_var, data_var)
+			if len(node.children) > 0 {
+				strings.write_string(b, "\t} else {\n")
+				emit_nodes(b, node.children[:], inside_slot, parent_vars)
+				strings.write_string(b, "\t}\n")
+			} else {
+				strings.write_string(b, "\t}\n")
+			}
 		case .Component_Call:
 			target_proc := fmt.tprintf("render_%s", to_snake_case(node.component_name))
-			if node.has_slot_block && len(node.children) > 0 {
-				// Slot child content: find outer variables used inside children
-				child_vars := make([dynamic]string)
-				defer delete(child_vars)
-				collect_vars(node.children[:], &child_vars)
-
-				slot_counter += 1
-				cur_slot_id := slot_counter
-
-				if len(child_vars) > 0 {
-					// Generate Slot_Ctx struct and instance
-					fmt.sbprintf(b, "\tSlot_Ctx_%d :: struct ", cur_slot_id)
-					strings.write_string(b, "{\n")
-					for v in child_vars {
-						fmt.sbprintf(b, "\t\t%s: string,\n", v)
-					}
-					strings.write_string(b, "\t}\n")
-
-					fmt.sbprintf(b, "\t__slot_ctx_%d := Slot_Ctx_%d", cur_slot_id, cur_slot_id)
-					strings.write_string(b, "{\n")
-					for v in child_vars {
-						if inside_slot {
-							fmt.sbprintf(b, "\t\t%s = ctx.%s,\n", v, v)
-						} else {
-							fmt.sbprintf(b, "\t\t%s = %s,\n", v, v)
-						}
-					}
-					strings.write_string(b, "\t}\n")
-
-					// Call component with slot callback and user_data pointer
-					fmt.sbprintf(b, "\t%s(b", target_proc)
-					for prop in node.props {
-						if prop.is_literal {
-							esc := escape_string_literal(prop.value)
-							defer delete(esc)
-							fmt.sbprintf(b, ", %s = \"%s\"", prop.name, esc)
-						} else {
-							if inside_slot && slice.contains(parent_vars, prop.value) {
-								fmt.sbprintf(b, ", %s = ctx.%s", prop.name, prop.value)
-							} else {
-								fmt.sbprintf(b, ", %s = %s", prop.name, prop.value)
-							}
-						}
-					}
-					strings.write_string(b, ", slot = proc(b: ^strings.Builder, user_data: rawptr) {\n")
-					fmt.sbprintf(b, "\t\tctx := cast(^Slot_Ctx_%d)user_data\n", cur_slot_id)
-					emit_nodes(b, node.children[:], true, child_vars[:])
-					fmt.sbprintf(b, "\t}, user_data = &__slot_ctx_%d)\n", cur_slot_id)
-				} else {
-					// No outer variables used in children
-					fmt.sbprintf(b, "\t%s(b", target_proc)
-					for prop in node.props {
-						if prop.is_literal {
-							esc := escape_string_literal(prop.value)
-							defer delete(esc)
-							fmt.sbprintf(b, ", %s = \"%s\"", prop.name, esc)
-						} else {
-							if inside_slot && slice.contains(parent_vars, prop.value) {
-								fmt.sbprintf(b, ", %s = ctx.%s", prop.name, prop.value)
-							} else {
-								fmt.sbprintf(b, ", %s = %s", prop.name, prop.value)
-							}
-						}
-					}
-					strings.write_string(b, ", slot = proc(b: ^strings.Builder, user_data: rawptr) {\n")
-					emit_nodes(b, node.children[:], false, nil)
-					strings.write_string(b, "\t})\n")
+			groups := group_slots(node.children[:])
+			defer {
+				for &g in groups {
+					delete(g.nodes)
+					delete(g.vars)
 				}
+				delete(groups)
+			}
+
+			if node.has_slot_block && len(groups) > 0 {
+				// 1. Prepare variables and emit context structs for each slot using outer variables
+				for &g in groups {
+					g.vars = make([dynamic]string)
+					collect_vars(g.nodes[:], &g.vars)
+					slice.sort(g.vars[:])
+
+					if len(g.vars) > 0 {
+						slot_counter += 1
+						g.ctx_id = slot_counter
+
+						fmt.sbprintf(b, "\tSlot_Ctx_%d :: struct ", g.ctx_id)
+						strings.write_string(b, "{\n")
+						for v in g.vars {
+							fmt.sbprintf(b, "\t\t%s: string,\n", v)
+						}
+						strings.write_string(b, "\t}\n")
+
+						fmt.sbprintf(b, "\t__slot_ctx_%d := Slot_Ctx_%d", g.ctx_id, g.ctx_id)
+						strings.write_string(b, "{\n")
+						for v in g.vars {
+							if inside_slot {
+								fmt.sbprintf(b, "\t\t%s = ctx.%s,\n", v, v)
+							} else {
+								fmt.sbprintf(b, "\t\t%s = %s,\n", v, v)
+							}
+						}
+						strings.write_string(b, "\t}\n")
+					}
+				}
+
+				// 2. Call target component procedure
+				fmt.sbprintf(b, "\t%s(b", target_proc)
+				for prop in node.props {
+					if prop.is_literal {
+						esc := escape_string_literal(prop.value)
+						defer delete(esc)
+						fmt.sbprintf(b, ", %s = \"%s\"", prop.name, esc)
+					} else {
+						if inside_slot && slice.contains(parent_vars, prop.value) {
+							fmt.sbprintf(b, ", %s = ctx.%s", prop.name, prop.value)
+						} else {
+							fmt.sbprintf(b, ", %s = %s", prop.name, prop.value)
+						}
+					}
+				}
+
+				// 3. Emit each slot closure and data pointer
+				for g in groups {
+					slot_arg := "slot" if g.name == "" else fmt.tprintf("slot_%s", g.name)
+					data_arg := "user_data" if g.name == "" else fmt.tprintf("slot_%s_data", g.name)
+
+					fmt.sbprintf(b, ", %s = proc(b: ^strings.Builder, user_data: rawptr) ", slot_arg)
+					strings.write_string(b, "{\n")
+					if len(g.vars) > 0 {
+						fmt.sbprintf(b, "\t\tctx := cast(^Slot_Ctx_%d)user_data\n", g.ctx_id)
+						emit_nodes(b, g.nodes[:], true, g.vars[:])
+						strings.write_string(b, "\t}, ")
+						fmt.sbprintf(b, "%s = &__slot_ctx_%d", data_arg, g.ctx_id)
+					} else {
+						emit_nodes(b, g.nodes[:], false, nil)
+						strings.write_string(b, "\t}")
+					}
+				}
+				strings.write_string(b, ")\n")
 			} else {
 				// No slot block
 				fmt.sbprintf(b, "\t%s(b", target_proc)
@@ -585,22 +946,26 @@ main :: proc() {
 
 			pos := 0
 			nodes := parse_nodes(src, &pos)
-			has_slot := has_slot_node(nodes[:])
 
 			vars := make([dynamic]string)
 			collect_vars(nodes[:], &vars)
 			slice.sort(vars[:])
+
+			slot_names := make([dynamic]string)
+			collect_slot_names(nodes[:], &slot_names)
+			slice.sort(slot_names[:])
 
 			comp := Component{
 				name = to_snake_case(base),
 				raw_name = base,
 				filename = fi.name,
 				nodes = nodes,
-				has_slot = has_slot,
+				has_slot = len(slot_names) > 0,
+				slot_names = slot_names,
 				all_vars = vars,
 			}
 			append(&components, comp)
-			fmt.printf("  [PARSED] %-15s -> render_%-12s (vars: %v, slot: %t)\n", fi.name, comp.name, vars[:], has_slot)
+			fmt.printf("  [PARSED] %-15s -> render_%-12s (vars: %v, slots: %v)\n", fi.name, comp.name, vars[:], slot_names[:])
 		}
 	}
 
@@ -620,9 +985,19 @@ main :: proc() {
 		for v in comp.all_vars {
 			fmt.sbprintf(&out_builder, ",\n\t%s: string = \"\"", v)
 		}
-		if comp.has_slot {
+
+		// Named slots (excluding "")
+		for s in comp.slot_names {
+			if s != "" {
+				fmt.sbprintf(&out_builder, ",\n\tslot_%s: Slot_Proc = nil,\n\tslot_%s_data: rawptr = nil", s, s)
+			}
+		}
+
+		// Default slot if present
+		if slice.contains(comp.slot_names[:], "") {
 			strings.write_string(&out_builder, ",\n\tslot: Slot_Proc = nil,\n\tuser_data: rawptr = nil")
 		}
+
 		strings.write_string(&out_builder, ",\n) {\n")
 
 		emit_nodes(&out_builder, comp.nodes[:], false, comp.all_vars[:])

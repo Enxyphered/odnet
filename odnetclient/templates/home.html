@@ -29,7 +29,13 @@
   <main class="max-w-4xl mx-auto px-6 py-8 space-y-6">
     @Greet(title: "Mr.", name: name, badge_id: badge_id)
 
-    @Card(title: "Account Overview") {
+    <Card title="Account Overview">
+      <slot:actions>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+          Active
+        </span>
+      </slot:actions>
+
       <div class="space-y-6">
         <div>
           <p class="text-sm text-slate-600">
@@ -75,7 +81,7 @@
           </div>
         </form>
       </div>
-    }
+    </Card>
   </main>
 </body>
 </html>
