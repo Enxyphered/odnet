@@ -6,6 +6,7 @@ import "core:strconv"
 import "core:strings"
 
 import http "../odnetlib"
+import "books"
 
 // -----------------------------------------------------------------------------
 // Route Handlers
@@ -21,6 +22,7 @@ handle_index :: proc(req: ^http.Request, res: ^http.Response) {
 		"  GET  /plaintext\n" +
 		"  GET  /json\n" +
 		"  GET  /home\n" +
+		"  GET  /books\n" +
 		"  GET  /books/{shortId}/delete\n" +
 		"  GET  /users/{id}/profile\n" +
 		"  POST /echo\n",
@@ -39,6 +41,12 @@ handle_json :: proc(req: ^http.Request, res: ^http.Response) {
 handle_home :: proc(req: ^http.Request, res: ^http.Response) {
 	b := strings.builder_make(context.temp_allocator)
 	render_home(&b, username = "Shaamil", name = "Shaamil", badge_id = "007")
+	http.response_set_html(res, strings.to_string(b))
+}
+
+handle_books :: proc(req: ^http.Request, res: ^http.Response) {
+	b := strings.builder_make(context.temp_allocator)
+	books.render_books(&b, books = books.SAMPLE_BOOKS, title = "Curated Computer Science Library")
 	http.response_set_html(res, strings.to_string(b))
 }
 
@@ -124,11 +132,16 @@ main :: proc() {
 	http.server_get(&server, "/plaintext", handle_plaintext)
 	http.server_get(&server, "/json", handle_json)
 	http.server_get(&server, "/home", handle_home)
+	http.server_get(&server, "/books", handle_books)
 	http.server_post(&server, "/api/greeting", handle_update_greeting)
 	http.server_get(&server, "/api/greeting", handle_update_greeting)
 
 	// 2. Static File Serving
-	http.server_static(&server, "/static", "odnetclient/static")
+	http.server_static(&server, "/static", "odnetclient/static", http.Static_Options{
+		max_age_seconds = 0,
+		immutable = false,
+		index_file = "index.html",
+	})
 
 	// 3. Dynamic Routes
 	http.server_get(&server, "/books/{shortId}/delete", handle_delete_book)
@@ -152,6 +165,7 @@ main :: proc() {
 	fmt.println("    GET  /plaintext")
 	fmt.println("    GET  /json")
 	fmt.println("    GET  /home")
+	fmt.println("    GET  /books")
 	fmt.println("    GET  /static/*")
 	fmt.println("    GET  /books/{shortId}/delete")
 	fmt.println("    GET  /users/{id}/profile")

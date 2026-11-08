@@ -1,0 +1,67 @@
+@props(book: Book, show_price: bool = true, index: int = 0)
+
+<div class="book-card">
+  <!-- Card Header -->
+  <div>
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        @if (index > 0) {
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+            #{index}
+          </span>
+        }
+      </div>
+
+      @if (book.is_bestseller) {
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap shadow-sm">
+          <span class="text-amber-500">★</span> Bestseller
+        </span>
+      }
+    </div>
+
+    <!-- Title & Author -->
+    <div class="mt-3">
+      <h3 class="font-bold text-slate-900 text-base leading-snug tracking-tight">
+        {book.title}
+      </h3>
+      <p class="text-xs text-slate-500 mt-1 flex items-center gap-1">
+        <span class="text-slate-400">By</span>
+        <span class="font-medium text-slate-700">{book.author}</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- Card Footer -->
+  <div class="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between">
+    @switch (book.status) {
+      @case ("in_stock") {
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          In Stock
+        </span>
+      }
+      @case ("out_of_stock") {
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+          Out of Stock
+        </span>
+      }
+      @default {
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+          Backorder
+        </span>
+      }
+    }
+
+    @if (show_price) {
+      <div>
+        @if (book.price == 0) {
+          <span class="text-sm font-bold text-emerald-600 uppercase tracking-wide">Free</span>
+        } @else {
+          <span class="text-base font-bold text-slate-900 tracking-tight">${book.price}</span>
+        }
+      </div>
+    }
+  </div>
+</div>
