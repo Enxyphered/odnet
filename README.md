@@ -1,148 +1,169 @@
-# odnet: Ultra-High-Performance HTTP/1.1 in Odin
+# odnet
 
-The repository is divided into three distinct modules:
-1. **`odnetlib`**: A reusable, zero-allocation HTTP/1.1 server library featuring native Windows (IOCP + `AcceptEx` + `GetQueuedCompletionStatusEx`) and Linux (epoll + `SO_REUSEPORT` + `EPOLLET`) engines, connection slab pools, zero-copy routing, static file streaming with HTTP/1.1 caching, and real-time OS file change detection.
-2. **`odnetgen`**: A standalone compile-time HTML component generator that compiles pure HTML templates into type-safe, zero-allocation Odin procedures streaming directly into socket builders.
-3. **`odnetclient`**: An application demonstrating how to use `odnetlib` and `odnetgen`, register client routes, mount static assets, and serve Tailwind & shadcn UI components.
+`odnet` is a lightweight HTTP/1.1 web server framework and compile-time HTML component engine written in [Odin](https://odin-lang.org/).
 
----
+## Modules
 
-## Tailwind CSS Setup & Compilation
+The repository is organized into three main components:
 
-`odnet` uses the official **standalone Tailwind CLI executable** (no Node.js or npm required).
-
-### 1. Download Tailwind Standalone CLI
-Download the standalone executable for your operating system from GitHub Releases:
-👉 **[Tailwind CSS Releases](https://github.com/tailwindlabs/tailwindcss/releases/latest)**
-
-- **Windows**: Download `tailwindcss-windows-x64.exe`
-- **Linux**: Download `tailwindcss-linux-x64`
-- **macOS**: Download `tailwindcss-macos-arm64` (Apple Silicon) or `tailwindcss-macos-x64` (Intel)
-
-### 2. Rename & Add to PATH
-1. Rename the downloaded executable to `tailwindcss.exe` (Windows) or `tailwindcss` (Linux/macOS).
-2. Move it to a folder in your system `PATH` (e.g. `C:\Tools\` on Windows, or `/usr/local/bin/` on Linux):
-   ```bash
-   # Linux / macOS
-   chmod +x tailwindcss
-   sudo mv tailwindcss /usr/local/bin/
-   ```
-3. Verify by opening a new terminal and running:
-   ```cmd
-   tailwindcss --help
-   ```
-
-### 3. Compiling CSS
-- **Input file**: `odnetclient/Input.css`
-- **Output file**: `odnetclient/static/css/Styles.css`
-
-You can build minified styles manually:
-```cmd
-tailwindcss -i odnetclient/Input.css -o odnetclient/static/css/Styles.css --minify
-```
-
-Or run watch mode during active frontend development:
-```cmd
-tailwindcss -i odnetclient/Input.css -o odnetclient/static/css/Styles.css --watch
-```
-> [!NOTE]
-> When `tailwindcss` writes changes to `Styles.css`, the server's **OS File Watcher** instantly detects the modification, updates the `ETag` and `Last-Modified` timestamps, and serves the new stylesheet without requiring a server restart.
+- **`odnetlib`**: Core HTTP/1.1 server library providing platform-native networking (IOCP on Windows, epoll on Linux), request parsing, routing, and static file serving with HTTP caching.
+- **`odnetgen`**: Standalone HTML template compiler that turns standard `.html` component files into type-safe Odin render procedures.
+- **`odnetclient`**: Example application demonstrating how to build web pages with components, serve static assets, handle form submissions via HTMX, and configure routing.
 
 ---
 
-## Zero-Allocation HTML Component Engine (`odnetgen`)
+## Quickstart
 
-Frontend developers write 100% native `.html` templates in `odnetclient/templates/`. `odnetgen` compiles them into type-safe Odin procedures in `odnetclient/templates_gen.odin`.
+### Prerequisites
+- [Odin compiler](https://odin-lang.org/docs/install/) (latest release or dev)
+- *(Optional)* [Tailwind CSS Standalone CLI](https://github.com/tailwindlabs/tailwindcss/releases/latest) if you want to modify stylesheet sources (`Input.css`).
 
-### Component Syntax
+### Build & Run
 
-| Feature | Syntax | Example |
-| :--- | :--- | :--- |
-| **Variables** | `{var_name}` | `<h1>Hello, {title} {name}!</h1>` |
-| **Escaped Braces** | `{{` / `}}` or `\{` / `\}` | `body {{ margin: 0; }}` renders literal `{ margin: 0; }` |
-| **Escaped At** | `@@` or `\@` | `user@@example.com` renders literal `@` |
-| **Component Call** | `@Component(...)` | `@Greet(title: "Mr.", name: name, badge_id: "007")` |
-| **HTML Tag Style** | `<Component ... />` | `<Button label="Save" variant="primary" />` |
-| **Slots (Children)**| `{slot}` & `{ ... }` | `@Card(title: "Settings") { @Input(...) }` |
+All build artifacts are placed into the `output/` directory (which is gitignored).
 
-### Zero-Allocation Slots
-When a parent template injects variables into a child slot, `odnetgen` emits a stack-allocated context struct (`Slot_Ctx`) and passes it into `user_data: rawptr`. No heap allocations, closures, or runtime overhead.
-
----
-
-## Static File Serving & HTTP/1.1 Caching
-
-`odnetlib` includes an ultra-fast static file server with real-time OS file change detection.
-
-```odin
-// Mount directory odnetclient/static at URL path /static
-http.server_static(&server, "/static", "odnetclient/static")
-```
-
-### Features:
-1. **Automated MIME Type Detection**: Comprehensive table supporting `.html`, `.css`, `.js`, `.json`, `.svg`, `.png`, `.jpg`, `.webp`, `.woff2`, `.ttf`, `.wasm`, `.pdf`, etc.
-2. **Directory Traversal Security**: Automatically rejects malicious paths containing `..`, volume drives `:`, or null bytes (`403 Forbidden`).
-3. **HTTP/1.1 Cache Headers**:
-   - `Cache-Control`: `public, max-age=3600` (configurable)
-   - `ETag`: Unique hex hash based on file size and nanosecond modification time
-   - `Last-Modified`: RFC-1123 HTTP date
-4. **Conditional Request Validation (304 Not Modified)**:
-   - Validates client `If-None-Match` against `ETag`
-   - Validates client `If-Modified-Since` against `Last-Modified`
-   - Returns instant `304 Not Modified` with zero network body transfer
-5. **Real-Time OS File Watcher**:
-   - Uses Windows `FindFirstChangeNotificationW` (and Linux `inotify`)
-   - When Tailwind or an editor updates `Styles.css` on disk, the server kernel watcher immediately invalidates the cache and generates fresh ETags and timestamps on the next request.
-
----
-
-## Zero-Allocation Dynamic Routing Design
-
-`odnetlib` solves dynamic routing via a **Two-Tier Zero-Copy Routing Engine**:
-
-1. **Tier 1 (Instant Static Match - 5 to 10 ns):**
-   Routes without parameters (like `/plaintext`, `/json`, or `/home`) are matched instantly via string pointer equality and length comparison. Zero segment splitting.
-2. **Tier 1.5 (Static File Mounts):**
-   Mounted directories (like `/static/*`) serve files with in-memory caching and ETags.
-3. **Tier 2 (Zero-Copy Dynamic Match - 30 to 50 ns):**
-   - Route templates like `/books/{shortId}/delete` extract parameters as a **direct slice (`string`) into `req.path`**.
-   - Parameters are stored in a fixed array on the stack (`[16]Param`).
-   - Zero heap allocations, zero string copies, zero GC overhead.
-
----
-
-## Building and Running
-
-### Build All (Windows)
+#### Windows
 ```cmd
 build.bat
-```
-`build.bat` automatically:
-1. Compiles Tailwind CSS if `tailwindcss` is found in PATH.
-2. Compiles `output\odnetgen.exe` executable.
-3. Runs `output\odnetgen.exe` to generate `odnetclient/templates_gen.odin`.
-4. Compiles `output\odnetclient.exe` with speed optimizations (`-o:speed`).
-
-### Build All (Linux)
-```bash
-./build.sh
-```
-
-### Running the Server
-```cmd
 output\odnetclient.exe --port 9090
 ```
-On Linux:
+
+#### Linux
 ```bash
+chmod +x build.sh
+./build.sh
 ./output/odnetclient --port 9090
 ```
 
-### Endpoints Available
-- `GET  /` - Application info and endpoints
-- `GET  /home` - Zero-allocation HTML page composed with Tailwind & shadcn UI
-- `GET  /static/css/Styles.css` - Static CSS with HTTP/1.1 caching, ETag & 304 validation
-- `GET  /plaintext` - TechEmpower plaintext benchmark
-- `GET  /json` - TechEmpower JSON benchmark
-- `GET  /books/{shortId}/delete` - Dynamic zero-copy route parameter
-- `GET  /users/{id}/profile` - Dynamic zero-copy route parameter
-- `POST /echo` - Echo payload back to client
+Once running, visit **`http://localhost:9090/home`** in your browser.
+
+---
+
+## Building from Scratch
+
+The build scripts handle the complete pipeline:
+
+1. **Tailwind CSS Compilation**: If `tailwindcss` is found on your PATH, minifies `odnetclient/Input.css` to `odnetclient/static/css/Styles.css`. If not found, uses the existing pre-built stylesheet.
+2. **Compile Generator**: Builds `output/odnetgen` from `odnetgen/`.
+3. **Compile Templates**: Runs `odnetgen` against `odnetclient/templates/` to produce `odnetclient/templates_gen.odin`.
+4. **Build Application**: Compiles the final executable (`output/odnetclient`).
+
+---
+
+## HTML Component Engine (`odnetgen`)
+
+`odnetgen` compiles native HTML files into Odin procedures. Components can be nested, accept parameters, and support slot insertion.
+
+### Template Syntax
+
+| Feature | Syntax | Example |
+| :--- | :--- | :--- |
+| **Variables** | `{name}` | `<h1>Hello, {title} {name}!</h1>` |
+| **Component Call** | `@Component(...)` | `@Greet(title: "Mr.", name: name, badge_id: "007")` |
+| **Tag Style** | `<Component ... />` | `<Button label="Submit" variant="primary" />` |
+| **Slots (Children)** | `{slot}` & `@Component(...) { ... }` | `@Card(title: "Overview") { <p>Slot content</p> }` |
+| **Escaped Braces** | `{{` / `}}` or `\{` / `\}` | `body {{ margin: 0; }}` renders literal `{ margin: 0; }` |
+| **Escaped At** | `@@` or `\@` | `user@@example.com` renders literal `@` |
+
+### Using Generated Components in Odin
+
+```odin
+import "core:strings"
+
+handle_home :: proc(req: ^http.Request, res: ^http.Response) {
+    b := strings.builder_make(context.temp_allocator)
+    render_home(&b, username = "Shaamil", name = "Shaamil", badge_id = "007")
+    http.response_set_html(res, strings.to_string(b))
+}
+```
+
+---
+
+## Routing & Handlers
+
+`odnetlib` supports static paths, dynamic route parameters, and static directory mounting:
+
+```odin
+package main
+
+import "core:fmt"
+import http "../odnetlib"
+
+main :: proc() {
+    cfg := http.DEFAULT_CONFIG
+    cfg.port = 9090
+
+    server: http.Server
+    http.server_init(&server, cfg)
+
+    // Static Routes
+    http.server_get(&server, "/", handle_index)
+    http.server_get(&server, "/home", handle_home)
+    http.server_post(&server, "/api/greeting", handle_update_greeting)
+
+    // Dynamic Parameter Routes
+    http.server_get(&server, "/users/{id}/profile", handle_profile)
+
+    // Static File Serving with Caching
+    http.server_static(&server, "/static", "odnetclient/static")
+
+    // Start Server
+    http.server_start(&server)
+}
+
+handle_profile :: proc(req: ^http.Request, res: ^http.Response) {
+    user_id, ok := http.get_param(req, "id")
+    if !ok {
+        res.status = .Bad_Request
+        return
+    }
+    http.response_set_body_string(res, fmt.tprintf("User ID: %s", user_id))
+}
+```
+
+---
+
+## Static File Serving & Caching
+
+Mount any directory to a URL prefix:
+
+```odin
+http.server_static(&server, "/static", "odnetclient/static")
+```
+
+Features included:
+- **MIME Type Resolution**: Maps common web file extensions (`.html`, `.css`, `.js`, `.svg`, `.json`, `.woff2`, etc.) to standard MIME headers.
+- **HTTP/1.1 Cache Validation**: Sends `ETag` and `Last-Modified` headers. When a client sends `If-None-Match` or `If-Modified-Since`, the server validates them and returns `304 Not Modified`.
+- **Live File Watcher**: Watches served static directories for modifications and refreshes cached file metadata automatically.
+- **Security**: Traversal prevention rejects requests attempting to access parent directories using `..` or illegal characters.
+
+---
+
+## Tailwind CSS Setup (Optional)
+
+If you wish to modify the styling in `odnetclient/Input.css`:
+
+1. Download the standalone Tailwind CLI executable for your platform from [Tailwind CSS Releases](https://github.com/tailwindlabs/tailwindcss/releases/latest).
+2. Rename the binary to `tailwindcss` (or `tailwindcss.exe` on Windows) and place it somewhere in your `PATH`.
+3. Run in watch mode while developing:
+   ```cmd
+   tailwindcss -i odnetclient/Input.css -o odnetclient/static/css/Styles.css --watch
+   ```
+   The server's file watcher will pick up new CSS changes as soon as Tailwind saves the file.
+
+---
+
+## Running Tests
+
+Run each package's test suite with Odin's built-in test runner:
+
+```cmd
+odin test odnetlib
+odin test odnetlib/html
+odin test odnetgen
+odin test odnetclient
+```
+
+## License
+
+MIT
