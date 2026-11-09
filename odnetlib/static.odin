@@ -220,7 +220,7 @@ router_add_static_mount :: proc(r: ^Router, route_prefix: string, fs_dir: string
 	return true
 }
 
-// Register a static directory on Server (e.g. s, "/static", "odnetclient/static")
+// Register a static directory on Server (e.g. s, "/static", "odnetdemo/static")
 server_static :: proc(s: ^Server, route_prefix: string, fs_dir: string, options := DEFAULT_STATIC_OPTIONS) -> bool {
 	return router_add_static_mount(&s.router, route_prefix, fs_dir, options)
 }

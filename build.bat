@@ -12,14 +12,14 @@ REM 1. Compile Tailwind CSS if tailwindcss CLI is available in PATH
 echo [1/4] Checking Tailwind CSS Compilation...
 where tailwindcss >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
-    echo [INFO] Running Tailwind CLI compilation: odnetclient/Input.css -^> odnetclient/static/css/Styles.css
-    tailwindcss -i odnetclient/Input.css -o odnetclient/static/css/Styles.css --minify
+    echo [INFO] Running Tailwind CLI compilation: odnetdemo/Input.css -^> odnetdemo/static/css/Styles.css
+    tailwindcss -i odnetdemo/Input.css -o odnetdemo/static/css/Styles.css --minify
     if %ERRORLEVEL% NEQ 0 (
         echo [ERROR] Tailwind CSS compilation failed.
         exit /b %ERRORLEVEL%
     )
 ) else (
-    echo [INFO] 'tailwindcss' CLI not found in PATH. Using existing odnetclient/static/css/Styles.css.
+    echo [INFO] 'tailwindcss' CLI not found in PATH. Using existing odnetdemo/static/css/Styles.css.
     echo        (Refer to README.md to install the standalone Tailwind CLI executable)
 )
 
@@ -49,9 +49,9 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 4. Build odnetclient executable into output/
-echo [4/4] Building odnetclient for Windows (IOCP Engine)...
-odin build odnetclient -out:output\odnetclient.exe -o:speed
+REM 4. Build odnetdemo executable into output/
+echo [4/4] Building odnetdemo for Windows (IOCP Engine)...
+odin build odnetdemo -out:output\odnetdemo.exe -o:speed
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Windows build failed.
     exit /b %ERRORLEVEL%
@@ -72,5 +72,5 @@ if not exist "odhtml_lsp\odhtml-lsp-0.1.0.vsix" (
 )
 
 echo ====================================================
-echo [SUCCESS] Windows executable built: output\odnetclient.exe
+echo [SUCCESS] Windows executable built: output\odnetdemo.exe
 echo ====================================================

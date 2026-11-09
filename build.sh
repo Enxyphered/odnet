@@ -11,10 +11,10 @@ mkdir -p output
 # 1. Compile Tailwind CSS if tailwindcss CLI is available in PATH
 echo "[1/4] Checking Tailwind CSS Compilation..."
 if command -v tailwindcss &> /dev/null; then
-    echo "[INFO] Running Tailwind CLI compilation: odnetclient/Input.css -> odnetclient/static/css/Styles.css"
-    tailwindcss -i odnetclient/Input.css -o odnetclient/static/css/Styles.css --minify
+    echo "[INFO] Running Tailwind CLI compilation: odnetdemo/Input.css -> odnetdemo/static/css/Styles.css"
+    tailwindcss -i odnetdemo/Input.css -o odnetdemo/static/css/Styles.css --minify
 else
-    echo "[INFO] 'tailwindcss' CLI not found in PATH. Using existing odnetclient/static/css/Styles.css."
+    echo "[INFO] 'tailwindcss' CLI not found in PATH. Using existing odnetdemo/static/css/Styles.css."
     echo "       (Refer to README.md to install the standalone Tailwind CLI executable)"
 fi
 
@@ -29,9 +29,9 @@ odin build odhtml_lsp -out:output/odhtml-lsp -o:speed
 echo "[3/4] Compiling odhtml templates..."
 ./output/odnetgen
 
-# 4. Build odnetclient executable into output/ for Linux
-echo "[4/4] Building odnetclient for Linux (epoll Multi-Reactor Engine)..."
-odin build odnetclient -out:output/odnetclient -target:linux_amd64 -o:speed
+# 4. Build odnetdemo executable into output/ for Linux
+echo "[4/4] Building odnetdemo for Linux (epoll Multi-Reactor Engine)..."
+odin build odnetdemo -out:output/odnetdemo -target:linux_amd64 -o:speed
 
 # 5. Ensure VS Code Extension package exists
 if [ ! -f "odhtml_lsp/odhtml-lsp-0.1.0.vsix" ]; then
@@ -44,5 +44,5 @@ if [ ! -f "odhtml_lsp/odhtml-lsp-0.1.0.vsix" ]; then
 fi
 
 echo "===================================================="
-echo "[SUCCESS] Linux executable built: output/odnetclient"
+echo "[SUCCESS] Linux executable built: output/odnetdemo"
 echo "===================================================="

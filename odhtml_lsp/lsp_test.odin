@@ -83,7 +83,7 @@ test_indexer_and_hover :: proc(t: ^testing.T) {
 	book_card_src := `@props(book: Book, show_price: bool = true, index: int = 0)
 <div class="card">{book.title}</div>`
 
-	indexer_index_file(&idx, "odnetclient/books/templates/book_card.odhtml", book_card_src)
+	indexer_index_file(&idx, "odnetdemo/books/templates/book_card.odhtml", book_card_src)
 
 	comp, ok := indexer_get_component(&idx, "BookCard")
 	testing.expect(t, ok, "BookCard should be found by PascalCase")
@@ -111,7 +111,7 @@ test_definition :: proc(t: ^testing.T) {
 	book_card_src := `@props(book: Book, show_price: bool = true, index: int = 0)
 <div class="card">{book.title}</div>`
 
-	indexer_index_file(&idx, "odnetclient/books/templates/book_card.odhtml", book_card_src)
+	indexer_index_file(&idx, "odnetdemo/books/templates/book_card.odhtml", book_card_src)
 
 	caller_src := `@props(active: bool = true)
 <div>@BookCard(book: my_book, show_price: true)</div>
@@ -133,7 +133,7 @@ test_definition :: proc(t: ^testing.T) {
 	testing.expect(t, strings.contains(def_var, "file:///test.odhtml"), "Definition on active should jump to @props in test.odhtml")
 
 	// 4. Definition on Odin type Book in book_card.odhtml -> should jump to books.odin!
-	card_uri := path_to_uri("odnetclient/books/templates/book_card.odhtml")
+	card_uri := path_to_uri("odnetdemo/books/templates/book_card.odhtml")
 	defer delete(card_uri)
 	def_odin := handle_definition(book_card_src, Position{line = 0, character = 15}, &idx, card_uri)
 	defer if def_odin != "null" do delete(def_odin)

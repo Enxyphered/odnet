@@ -16,7 +16,7 @@ handle_index :: proc(req: ^http.Request, res: ^http.Response) {
 	http.response_set_body_string(
 		res,
 		"====================================================\n" +
-		"  Welcome to odnetclient powered by odnetlib!       \n" +
+		"  Welcome to odnetdemo powered by odnetlib!         \n" +
 		"====================================================\n" +
 		"Endpoints available:\n" +
 		"  GET  /plaintext\n" +
@@ -137,7 +137,7 @@ main :: proc() {
 	http.server_get(&server, "/api/greeting", handle_update_greeting)
 
 	// 2. Static File Serving
-	http.server_static(&server, "/static", "odnetclient/static", http.Static_Options{
+	http.server_static(&server, "/static", "odnetdemo/static", http.Static_Options{
 		max_age_seconds = 0,
 		immutable = false,
 		index_file = "index.html",
@@ -152,7 +152,7 @@ main :: proc() {
 	http.server_not_found(&server, handle_custom_404)
 
 	fmt.println("================================================================================")
-	fmt.println("             odnetclient: Custom Client Application using odnetlib              ")
+	fmt.println("             odnetdemo: Demo Application using odnetlib                         ")
 	fmt.println("================================================================================")
 	when ODIN_OS == .Windows {
 		fmt.println("  Active Engine    : Windows IOCP")

@@ -9,7 +9,7 @@ The repository consists of four components:
 - **`odnetlib`**: An HTTP/1.1 server library using platform-native I/O with Windows IOCP and Linux epoll. Includes request parsing, routing with dynamic path parameters, static file serving, and HTTP cache validation.
 - **`odnetgen`**: A compile-time template generator that compiles `.odhtml` templates into type-safe Odin procedures. Supports strongly-typed props, control flow, loops, slots, and multi-package template discovery.
 - **`odhtml_lsp`**: A high-performance native Odin Language Server and VS Code extension for `.odhtml` templates featuring syntax highlighting, real-time diagnostics, autocompletion, hover tooltips, and go-to-definition.
-- **`odnetclient`**: An example application demonstrating routing, server-rendered components, HTMX integration, and modular subpackages.
+- **`odnetdemo`**: An example application demonstrating routing, server-rendered components, HTMX integration, and modular subpackages.
 
 ---
 
@@ -24,14 +24,14 @@ The repository consists of four components:
 #### Windows
 ```cmd
 build.bat
-output\odnetclient.exe --port 9090
+output\odnetdemo.exe --port 9090
 ```
 
 #### Linux
 ```bash
 chmod +x build.sh
 ./build.sh
-./output/odnetclient --port 9090
+./output/odnetdemo --port 9090
 ```
 
 Routes available when running:
@@ -46,10 +46,10 @@ Routes available when running:
 
 The `build.bat` and `build.sh` scripts run the following steps:
 
-1. **Tailwind CSS**: Builds `odnetclient/Input.css` into `odnetclient/static/css/Styles.css` if `tailwindcss` is available on the PATH.
+1. **Tailwind CSS**: Builds `odnetdemo/Input.css` into `odnetdemo/static/css/Styles.css` if `tailwindcss` is available on the PATH.
 2. **Compiler & Language Server**: Builds `odnetgen` into `output/odnetgen` and the native `odhtml_lsp` server into `output/odhtml-lsp`.
 3. **Template Generation**: Runs `odnetgen`, which scans for folders containing a `templates` directory with `.odhtml` (or `.html`) files, infers the package name, and writes `template_gen.odin` in the parent module folder.
-4. **Application Build**: Compiles `odnetclient` into `output/odnetclient`.
+4. **Application Build**: Compiles `odnetdemo` into `output/odnetdemo`.
 
 ---
 
@@ -62,13 +62,13 @@ The `build.bat` and `build.sh` scripts run the following steps:
 Running `odnetgen` with no arguments scans the project tree and compiles any module with a `templates` directory:
 
 ```
-odnetclient/
-├── templates/             -> compiles to odnetclient/template_gen.odin (package main)
+odnetdemo/
+├── templates/             -> compiles to odnetdemo/template_gen.odin (package main)
 └── books/
-    └── templates/         -> compiles to odnetclient/books/template_gen.odin (package books)
+    └── templates/         -> compiles to odnetdemo/books/template_gen.odin (package books)
 ```
 
-The package name is inferred from existing `.odin` files in the directory. Generated render procedures are placed directly in the module's package. Templates inside `odnetclient/books/templates/` have access to all declarations in `package books` without explicit package qualifiers.
+The package name is inferred from existing `.odin` files in the directory. Generated render procedures are placed directly in the module's package. Templates inside `odnetdemo/books/templates/` have access to all declarations in `package books` without explicit package qualifiers.
 
 ### Syntax Cheatsheet
 
@@ -221,7 +221,7 @@ main :: proc() {
     http.server_post(&server, "/api/submit", handle_submit)
 
     // Static assets
-    http.server_static(&server, "/static", "odnetclient/static")
+    http.server_static(&server, "/static", "odnetdemo/static")
 
     http.server_start(&server)
 }
@@ -320,7 +320,7 @@ code --install-extension odhtml_lsp/odhtml-lsp-0.1.0.vsix --force
 #### Step 3: Reload VS Code
 Press `Ctrl+Shift+P`, type **Developer: Reload Window**, and press Enter.
 
-Open any `.odhtml` file (e.g. `odnetclient/books/templates/book_card.odhtml`). The extension will automatically discover `output/odhtml-lsp.exe`, activate syntax highlighting, and start the language server.
+Open any `.odhtml` file (e.g. `odnetdemo/books/templates/book_card.odhtml`). The extension will automatically discover `output/odhtml-lsp.exe`, activate syntax highlighting, and start the language server.
 
 ---
 
@@ -398,7 +398,7 @@ odin test odnetlib
 odin test odnetlib/html
 odin test odnetgen
 odin test odhtml_lsp
-odin test odnetclient
+odin test odnetdemo
 ```
 
 ## License

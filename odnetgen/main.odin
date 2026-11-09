@@ -1867,7 +1867,7 @@ detect_package_name :: proc(dir: string) -> string {
 	f, err := os.open(dir)
 	if err != nil {
 		base := filepath.base(dir)
-		return "main" if base == "." || base == "odnetclient" else strings.clone(base)
+		return "main" if base == "." || base == "odnetdemo" else strings.clone(base)
 	}
 	defer os.close(f)
 
@@ -1898,7 +1898,7 @@ detect_package_name :: proc(dir: string) -> string {
 	}
 
 	base := filepath.base(dir)
-	if base == "." || base == "odnetclient" do return "main"
+	if base == "." || base == "odnetdemo" do return "main"
 	return strings.clone(base)
 }
 
@@ -2197,7 +2197,7 @@ main :: proc() {
 	fmt.println("====================================================")
 
 	if in_dir != "" {
-		if out_file == "" do out_file = "odnetclient/template_gen.odin"
+		if out_file == "" do out_file = "odnetdemo/template_gen.odin"
 		if pkg_name == "" do pkg_name = "main"
 		fmt.printf("Templates dir : %s\n", in_dir)
 		fmt.printf("Output file   : %s\n", out_file)

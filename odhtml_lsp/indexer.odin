@@ -289,7 +289,7 @@ find_odin_symbol_location :: proc(template_path: string, symbol: string) -> (str
 	parent_clean, _ := filepath.clean(parent, context.temp_allocator)
 	dir_clean, _ := filepath.clean(dir, context.temp_allocator)
 
-	// Check parent directory first (e.g. odnetclient/books when template is in odnetclient/books/templates)
+	// Check parent directory first (e.g. odnetdemo/books when template is in odnetdemo/books/templates)
 	if file, line, col, ok := scan_odin_dir_for_symbol(parent_clean, symbol); ok {
 		return file, line, col, true
 	}
