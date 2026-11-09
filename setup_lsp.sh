@@ -19,17 +19,17 @@ cp output/odhtml-lsp odhtml_lsp/odhtml-lsp 2>/dev/null || true
 mkdir -p "$HOME/.local/bin" 2>/dev/null || true
 cp output/odhtml-lsp "$HOME/.local/bin/odhtml-lsp" 2>/dev/null && echo "[INFO] Global LSP binary updated at: $HOME/.local/bin/odhtml-lsp" || true
 
-# 3. Ensure VSIX package exists or build it
-if [ ! -f "odhtml_lsp/odhtml-lsp-0.1.0.vsix" ]; then
+# 3. Package or verify VSIX package
+if command -v npm &> /dev/null; then
     echo "[2/3] Packaging VS Code Extension..."
-    if command -v npm &> /dev/null; then
-        (cd odhtml_lsp && npm run compile && npx @vscode/vsce package --no-dependencies --allow-missing-repository)
+    (cd odhtml_lsp && npm run compile && npx @vscode/vsce package --no-dependencies --allow-missing-repository)
+else
+    if [ -f "odhtml_lsp/odhtml-lsp-0.1.0.vsix" ]; then
+        echo "[2/3] Verified pre-built odhtml-lsp-0.1.0.vsix is ready."
     else
-        echo "[ERROR] 'npm' not found and odhtml-lsp-0.1.0.vsix is missing."
+        echo "[ERROR] 'npm' not found and pre-built odhtml-lsp-0.1.0.vsix is missing."
         exit 1
     fi
-else
-    echo "[2/3] Verified odhtml-lsp-0.1.0.vsix is ready."
 fi
 
 # 4. Install VSIX into VS Code

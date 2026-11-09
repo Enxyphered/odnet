@@ -31,21 +31,21 @@ if exist "C:\tools\odhtml\odhtml-lsp.exe" (
     echo [INFO] Global LSP binary updated at: C:\tools\odhtml\odhtml-lsp.exe
 )
 
-REM 4. Ensure VSIX package exists or build it
-if not exist "odhtml_lsp\odhtml-lsp-0.1.0.vsix" (
+REM 4. Package or verify VSIX package
+where npm >nul 2>nul
+if %ERRORLEVEL% EQU 0 (
     echo [2/3] Packaging VS Code Extension...
-    where npm >nul 2>nul
-    if %ERRORLEVEL% EQU 0 (
-        pushd odhtml_lsp
-        call npm run compile
-        call npx @vscode/vsce package --no-dependencies --allow-missing-repository
-        popd
+    pushd odhtml_lsp
+    call npm run compile
+    call npx @vscode/vsce package --no-dependencies --allow-missing-repository
+    popd
+) else (
+    if exist "odhtml_lsp\odhtml-lsp-0.1.0.vsix" (
+        echo [2/3] Verified pre-built odhtml-lsp-0.1.0.vsix is ready.
     ) else (
-        echo [ERROR] 'npm' not found and odhtml-lsp-0.1.0.vsix is missing.
+        echo [ERROR] 'npm' not found and pre-built odhtml-lsp-0.1.0.vsix is missing.
         exit /b 1
     )
-) else (
-    echo [2/3] Verified odhtml-lsp-0.1.0.vsix is ready.
 )
 
 REM 5. Install VSIX into VS Code

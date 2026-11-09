@@ -18,19 +18,37 @@ indexer_init :: proc(idx: ^Indexer) {
 	idx.file_to_component = make(map[string]string)
 }
 
+component_info_destroy :: proc(comp: ^Component_Info) {
+	delete(comp.name)
+	delete(comp.pascal_name)
+	delete(comp.file_path)
+	delete(comp.uri)
+	for pr in comp.props {
+		delete(pr.name)
+		delete(pr.type_name)
+		delete(pr.default_value)
+	}
+	delete(comp.props)
+	for imp in comp.imports {
+		delete(imp.path)
+		delete(imp.alias)
+	}
+	delete(comp.imports)
+	for sn in comp.slot_names {
+		delete(sn)
+	}
+	delete(comp.slot_names)
+}
+
 indexer_destroy :: proc(idx: ^Indexer) {
-	for _, comp in idx.components_by_pascal {
-		delete(comp.name)
-		delete(comp.pascal_name)
-		delete(comp.file_path)
-		delete(comp.uri)
-		delete(comp.props)
-		delete(comp.imports)
-		for sn in comp.slot_names do delete(sn)
-		delete(comp.slot_names)
+	for _, &comp in idx.components_by_pascal {
+		component_info_destroy(&comp)
 	}
 	delete(idx.components_by_pascal)
 	delete(idx.components_by_snake)
+	for k, _ in idx.file_to_component {
+		delete(k)
+	}
 	delete(idx.file_to_component)
 }
 
@@ -139,20 +157,54 @@ indexer_index_file :: proc(idx: ^Indexer, file_path: string, content: string = "
 	abs_path, abs_err := filepath.abs(file_path, context.allocator)
 	actual_path := abs_path if abs_err == os.ERROR_NONE else strings.clone(file_path)
 
+	// Clean up any existing component entry for this file
+	if old_pascal, exists := idx.file_to_component[file_path]; exists {
+		if old_comp, ok := idx.components_by_pascal[old_pascal]; ok {
+			component_info_destroy(&old_comp)
+		}
+		delete_key(&idx.components_by_pascal, old_pascal)
+		delete_key(&idx.components_by_snake, to_snake_case(old_pascal))
+	}
+
+	cloned_props := make([dynamic]Prop_Decl)
+	for pr in res.props {
+		append(&cloned_props, Prop_Decl{
+			name          = strings.clone(pr.name),
+			type_name     = strings.clone(pr.type_name),
+			default_value = strings.clone(pr.default_value),
+			is_required   = pr.is_required,
+			range         = pr.range,
+			name_range    = pr.name_range,
+		})
+	}
+
+	cloned_imports := make([dynamic]Import_Decl)
+	for imp in res.imports {
+		append(&cloned_imports, Import_Decl{
+			path  = strings.clone(imp.path),
+			alias = strings.clone(imp.alias),
+			range = imp.range,
+		})
+	}
+
+	snake_clone := strings.clone(snake)
+	pascal_clone := strings.clone(pascal)
+
 	comp := Component_Info{
-		name        = strings.clone(snake),
-		pascal_name = strings.clone(pascal),
+		name        = snake_clone,
+		pascal_name = pascal_clone,
 		file_path   = actual_path,
 		uri         = path_to_uri(actual_path),
-		props       = res.props,
-		imports     = res.imports,
+		props       = cloned_props,
+		imports     = cloned_imports,
 		slot_names  = slot_names,
 	}
 
-	idx.components_by_pascal[pascal] = comp
-	idx.components_by_snake[snake] = comp
-	idx.file_to_component[file_path] = pascal
+	idx.components_by_pascal[pascal_clone] = comp
+	idx.components_by_snake[snake_clone] = comp
+	idx.file_to_component[strings.clone(file_path)] = pascal_clone
 
+	parse_result_destroy(&res)
 	return true
 }
 

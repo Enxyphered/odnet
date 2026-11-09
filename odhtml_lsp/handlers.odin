@@ -5,6 +5,7 @@ import "core:slice"
 import "core:strings"
 
 json_escape :: proc(b: ^strings.Builder, s: string) {
+	hex := "0123456789abcdef"
 	for i in 0 ..< len(s) {
 		c := s[i]
 		switch c {
@@ -13,7 +14,14 @@ json_escape :: proc(b: ^strings.Builder, s: string) {
 		case '\n': strings.write_string(b, "\\n")
 		case '\r': strings.write_string(b, "\\r")
 		case '\t': strings.write_string(b, "\\t")
-		case:      strings.write_byte(b, c)
+		case:
+			if c < 32 {
+				strings.write_string(b, "\\u00")
+				strings.write_byte(b, hex[(c >> 4) & 0x0f])
+				strings.write_byte(b, hex[c & 0x0f])
+			} else {
+				strings.write_byte(b, c)
+			}
 		}
 	}
 }
