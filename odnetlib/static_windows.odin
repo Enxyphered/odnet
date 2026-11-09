@@ -22,15 +22,16 @@ static_watcher_worker :: proc(data: rawptr) {
 	for {
 		wait_res := win.WaitForSingleObject(handle, 200)
 		if wait_res == win.WAIT_OBJECT_0 {
-			sync.lock(&global_static_cache.mutex)
+			sync.rw_mutex_lock(&global_static_cache.rw_lock)
 			global_static_cache.version += 1
+			norm_mount := normalize_static_path(mount.fs_dir)
 			for i in 0 ..< global_static_cache.num_files {
 				f := &global_static_cache.files[i]
-				if strings.has_prefix(f.path, mount.fs_dir) {
+				if strings.has_prefix(f.path, norm_mount) {
 					f.valid = false
 				}
 			}
-			sync.unlock(&global_static_cache.mutex)
+			sync.rw_mutex_unlock(&global_static_cache.rw_lock)
 			win.FindNextChangeNotification(handle)
 		}
 	}

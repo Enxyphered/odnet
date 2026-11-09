@@ -93,3 +93,29 @@ test_serve_file_caching_and_304 :: proc(t: ^testing.T) {
 	testing.expect_value(t, res_after_update.status, Status_Code.OK)
 	testing.expect_value(t, string(res_after_update.body), "updated content v2")
 }
+
+@(test)
+test_in_memory_static_caching :: proc(t: ^testing.T) {
+	defer reset_static_cache()
+	test_file := "test_memory_cached.css"
+	_ = os.write_entire_file(test_file, transmute([]u8)string(".btn { color: red; }"))
+	defer os.remove(test_file)
+
+	opts := DEFAULT_STATIC_OPTIONS
+	opts.in_memory = true
+
+	// Preload into memory cache
+	ok_preload := static_cache_preload_file(test_file)
+	testing.expect(t, ok_preload, "static_cache_preload_file should succeed")
+
+	// Even if file is deleted from disk, in_memory mode serves directly from RAM!
+	_ = os.remove(test_file)
+
+	req := Request{method = .GET, path = "/test_memory_cached.css"}
+	res: Response
+	ok_serve := serve_file(&req, &res, test_file, opts)
+	testing.expect(t, ok_serve, "serve_file should succeed from in-memory cache even without file on disk")
+	testing.expect_value(t, res.status, Status_Code.OK)
+	testing.expect_value(t, string(res.body), ".btn { color: red; }")
+	testing.expect_value(t, res.content_type, "text/css; charset=utf-8")
+}
